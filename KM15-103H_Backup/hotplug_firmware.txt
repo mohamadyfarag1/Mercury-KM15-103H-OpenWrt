@@ -1,0 +1,45 @@
+drwxrwxr-x    2 root     root            61 Jun 23 20:40 .
+drwxr-xr-x   13 root     root           156 Jun 23 20:40 ..
+-rw-rw-r--    1 root     root           366 Jun 23 20:40 10-ath9k-eeprom
+-rw-rw-r--    1 root     root           369 Jun 23 20:40 11-mt76-caldata
+#!/bin/sh
+
+[ -e /lib/firmware/$FIRMWARE ] && exit 0
+
+. /lib/functions/caldata.sh
+
+board=$(board_name)
+
+case "$FIRMWARE" in
+"ath9k-eeprom-pci-0000:01:00.0.bin")
+	case $board in
+	mikrotik,ltap-2hnd)
+		caldata_sysfsload_from_file "/sys/firmware/mikrotik/hard_config/wlan_data" 0x5000 0x440
+		;;
+	*)
+		caldata_die "board $board is not supported yet"
+		;;
+	esac
+	;;
+esac
+#!/bin/sh
+
+[ -e /lib/firmware/$FIRMWARE ] && exit 0
+
+. /lib/functions/caldata.sh
+
+board=$(board_name)
+
+case "$FIRMWARE" in
+"mediatek/mt7915_eeprom_dbdc.bin")
+	case "$board" in
+	netis,n6)
+		EEPROM=/lib/firmware/$FIRMWARE
+		head -c $((0xe00)) /dev/mtd2 > $EEPROM
+		printf "\x92" | \
+			dd of=$EEPROM seek=$((0x190)) bs=1 conv=notrunc \
+			2>/dev/null
+		;;
+	esac
+	;;
+esac

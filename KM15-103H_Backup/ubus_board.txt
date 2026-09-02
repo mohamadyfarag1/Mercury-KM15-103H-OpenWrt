@@ -1,0 +1,16 @@
+{
+	"kernel": "6.6.93",
+	"hostname": "WitWrt-KM15-103H",
+	"system": "MediaTek MT7621 ver:1 eco:3",
+	"model": "Mercury KM15-103H",
+	"board_name": "mercury,km15-103h",
+	"rootfs_type": "squashfs",
+	"release": {
+		"distribution": "WitWrt",
+		"version": "24.10.2",
+		"revision": "r28739-d9340319c6",
+		"target": "ramips/mt7621",
+		"description": "WitWrt 24.10.2 r28739-d9340319c6",
+		"builddate": "1750711236"
+	}
+}

@@ -1,0 +1,168 @@
+asn1_decoder           12288  1 cifs
+authenc                12288  2 crypto_hw_eip93,authencesn
+authencesn             12288  0 
+autofs4                28672  1 
+button_hotplug         12288  0 
+cfg80211              323584  4 mt7915e,mt76_connac_lib,mt76,mac80211
+cifs                  528384  0 
+cifs_arc4              12288  1 cifs
+cifs_md4               12288  1 cifs
+cmac                   12288  0 
+compat                 12288  2 mac80211,cfg80211
+crc_ccitt              12288  1 ppp_async
+crc32c_generic         12288  1 
+crypto_hw_eip93        36864  0 
+des_generic            12288  0 
+dns_resolver           12288  1 cifs
+drbg                   24576  0 
+ecb                    12288  0 
+ehci_fsl               12288  0 
+ehci_hcd               49152  2 ehci_platform,ehci_fsl
+ehci_platform          12288  0 
+fsl_mph_dr_of          12288  0 
+geniv                  12288  1 seqiv
+gpio_button_hotplug    12288  0 
+hmac                   12288  0 
+hwmon                  16384  1 mt7915e
+input_core             40960  1 button_hotplug
+ip_set                 32768 17 xt_set,ip_set_list_set,ip_set_hash_netportnet,ip_set_hash_netport,ip_set_hash_netnet,ip_set_hash_netiface,ip_set_hash_net,ip_set_hash_mac,ip_set_hash_ipportnet,ip_set_hash_ipportip,ip_set_hash_ipport,ip_set_hash_ipmark,ip_set_hash_ipmac,ip_set_hash_ip,ip_set_bitmap_port,ip_set_bitmap_ipmac,ip_set_bitmap_ip
+ip_set_bitmap_ip       16384  0 
+ip_set_bitmap_ipmac    16384  0 
+ip_set_bitmap_port     16384  0 
+ip_set_hash_ip         36864  0 
+ip_set_hash_ipmac      36864  0 
+ip_set_hash_ipmark     36864  2 
+ip_set_hash_ipport     36864  0 
+ip_set_hash_ipportip   36864  0 
+ip_set_hash_ipportnet   40960  0 
+ip_set_hash_mac        24576  0 
+ip_set_hash_net        40960  5 
+ip_set_hash_netiface   40960  0 
+ip_set_hash_netnet     45056  0 
+ip_set_hash_netport    40960  0 
+ip_set_hash_netportnet   45056  0 
+ip_set_list_set        16384  1 
+ip_tables              20480  2 iptable_mangle,iptable_filter
+ip6_tables             20480  2 ip6table_mangle,ip6table_filter
+ip6t_REJECT            12288  0 
+ip6table_filter        12288  0 
+ip6table_mangle        12288  0 
+ipt_ECN                12288  0 
+ipt_REJECT             12288  0 
+iptable_filter         12288  0 
+iptable_mangle         12288  0 
+jitterentropy_rng      16384  0 
+leds_gpio              12288  0 
+libcrc32c              12288  1 nf_tables
+libdes                 24576  2 crypto_hw_eip93,des_generic
+mac80211              647168  3 mt7915e,mt76_connac_lib,mt76
+md5                    12288  0 
+mt76                   69632  2 mt7915e,mt76_connac_lib
+mt76_connac_lib        49152  1 mt7915e
+mt7915e               126976  0 
+netfs                  20480  1 cifs
+nf_conncount           16384  1 xt_connlimit
+nf_conntrack           94208 16 xt_connlimit,nf_conncount,xt_state,xt_helper,xt_conntrack,xt_connmark,xt_connbytes,xt_CT,nft_redir,nft_nat,nft_masq,nft_flow_offload,nft_ct,nf_nat,nf_flow_table,nf_conntrack_bridge
+nf_conntrack_bridge    12288  0 
+nf_defrag_ipv4         12288  1 nf_conntrack
+nf_defrag_ipv6         16384  2 nf_conntrack_bridge,nf_conntrack
+nf_dup_netdev          12288  2 nft_fwd_netdev,nft_dup_netdev
+nf_flow_table          32768  2 nft_flow_offload,nf_flow_table_inet
+nf_flow_table_inet     12288  0 
+nf_log_syslog          20480  0 
+nf_nat                 36864  4 nft_redir,nft_nat,nft_masq,nft_chain_nat
+nf_reject_ipv4         12288  4 ipt_REJECT,nft_reject_ipv4,nft_reject_inet,nft_reject_bridge
+nf_reject_ipv6         12288  4 nft_reject_ipv6,nft_reject_inet,nft_reject_bridge,ip6t_REJECT
+nf_tables             208896439 nft_redir,nft_nat,nft_masq,nft_flow_offload,nft_fib_inet,nft_ct,nft_chain_nat,nf_flow_table_inet,nft_reject_ipv6,nft_reject_ipv4,nft_reject_inet,nft_reject_bridge,nft_reject,nft_quota,nft_numgen,nft_meta_bridge,nft_log,nft_limit,nft_hash,nft_fwd_netdev,nft_fib_ipv6,nft_fib_ipv4,nft_fib,nft_dup_netdev,nft_compat
+nfnetlink              16384  3 nft_compat,nf_tables,ip_set
+nft_chain_nat          12288  2 
+nft_compat             16384 47 
+nft_ct                 20480  4 
+nft_dup_netdev         12288  0 
+nft_fib                12288  3 nft_fib_inet,nft_fib_ipv6,nft_fib_ipv4
+nft_fib_inet           12288  0 
+nft_fib_ipv4           12288  1 nft_fib_inet
+nft_fib_ipv6           12288  1 nft_fib_inet
+nft_flow_offload       12288  0 
+nft_fwd_netdev         12288  0 
+nft_hash               12288  0 
+nft_limit              12288  5 
+nft_log                12288  0 
+nft_masq               12288  1 
+nft_meta_bridge        12288  0 
+nft_nat                12288  0 
+nft_numgen             12288  0 
+nft_quota              12288  0 
+nft_redir              12288  0 
+nft_reject             12288  4 nft_reject_ipv6,nft_reject_ipv4,nft_reject_inet,nft_reject_bridge
+nft_reject_bridge      12288  0 
+nft_reject_inet        12288  2 
+nft_reject_ipv4        12288  0 
+nft_reject_ipv6        12288  0 
+nls_base               12288  3 cifs,nls_cp864,usbcore
+nls_cp864              12288  0 
+nls_ucs2_utils          8192  1 cifs
+ohci_hcd               32768  1 ohci_platform
+ohci_platform          12288  0 
+oid_registry           12288  1 cifs
+ppp_async              16384  0 
+ppp_generic            36864  3 pppoe,ppp_async,pppox
+pppoe                  20480  0 
+pppox                  12288  1 pppoe
+rng                    12288  3 jitterentropy_rng,drbg,geniv
+scsi_common            12288  3 usb_storage,sd_mod,scsi_mod
+scsi_mod              106496  3 ums_cypress,usb_storage,sd_mod
+sd_mod                 40960  0 
+seqiv                  12288  0 
+sha1_generic           12288  0 
+sha256_generic         12288  0 
+sha3_generic           16384  0 
+sha512_generic         16384  0 
+slhc                   16384  1 ppp_generic
+tun                    45056  0 
+uhci_hcd               28672  0 
+ums_alauda             16384  0 
+ums_cypress            12288  0 
+ums_datafab            12288  0 
+ums_freecom            12288  0 
+ums_isd200             12288  0 
+ums_jumpshot           12288  0 
+ums_karma              12288  0 
+ums_sddr09             16384  0 
+ums_sddr55             16384  0 
+ums_usbat              16384  0 
+usb_common             12288  6 xhci_plat_hcd,xhci_hcd,ohci_platform,ohci_hcd,ehci_platform,usbcore
+usb_storage            49152 10 ums_usbat,ums_sddr55,ums_sddr09,ums_karma,ums_jumpshot,ums_isd200,ums_freecom,ums_datafab,ums_cypress,ums_alauda
+usbcore               155648 21 ums_usbat,ums_sddr55,ums_sddr09,ums_karma,ums_jumpshot,ums_isd200,ums_freecom,ums_datafab,ums_cypress,ums_alauda,usb_storage,xhci_plat_hcd,xhci_pci,xhci_mtk_hcd,xhci_hcd,uhci_hcd,ohci_platform,ohci_hcd,ehci_platform,ehci_fsl,ehci_hcd
+x_tables               24576 37 xt_connlimit,xt_state,xt_helper,xt_conntrack,xt_connmark,xt_connbytes,xt_CT,ipt_REJECT,xt_time,xt_tcpudp,xt_tcpmss,xt_statistic,xt_recent,xt_multiport,xt_mark,xt_mac,xt_limit,xt_length,xt_hl,xt_ecn,xt_dscp,xt_comment,xt_TCPMSS,xt_LOG,xt_HL,xt_DSCP,xt_CLASSIFY,nft_compat,iptable_mangle,iptable_filter,ipt_ECN,ip_tables,xt_set,ip6table_mangle,ip6table_filter,ip6_tables,ip6t_REJECT
+xhci_hcd              122880  3 xhci_plat_hcd,xhci_pci,xhci_mtk_hcd
+xhci_mtk_hcd           16384  0 
+xhci_pci               12288  0 
+xhci_plat_hcd          12288  0 
+xt_CLASSIFY            12288  0 
+xt_CT                  12288  0 
+xt_DSCP                12288  0 
+xt_HL                  12288  0 
+xt_LOG                 12288  0 
+xt_TCPMSS              12288  0 
+xt_comment             12288 10 
+xt_connbytes           12288  0 
+xt_connlimit           12288  0 
+xt_connmark            12288  4 
+xt_conntrack           12288  0 
+xt_dscp                12288  0 
+xt_ecn                 12288  0 
+xt_helper              12288  0 
+xt_hl                  12288  0 
+xt_length              12288  0 
+xt_limit               12288  0 
+xt_mac                 12288  0 
+xt_mark                12288 16 
+xt_multiport           12288  2 
+xt_recent              16384  0 
+xt_set                 16384 10 
+xt_state               12288  0 
+xt_statistic           12288  0 
+xt_tcpmss              12288  0 
+xt_tcpudp              12288  5 
+xt_time                12288  0 

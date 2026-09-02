@@ -1,0 +1,12 @@
+/lib/firmware/:
+drwxr-xr-x    3 root     root            52 Jun 23 20:40 .
+drwxr-xr-x   13 root     root           639 Jun 23 20:40 ..
+drwxr-xr-x    2 root     root            85 Jun 23 20:40 mediatek
+-rw-r--r--    1 root     root          6208 Jun 23 20:40 regulatory.db
+
+/lib/firmware/mediatek:
+drwxr-xr-x    2 root     root            85 Jun 23 20:40 .
+drwxr-xr-x    3 root     root            52 Jun 23 20:40 ..
+-rw-r--r--    1 root     root        144544 Jun 23 20:40 mt7915_rom_patch.bin
+-rw-r--r--    1 root     root        113712 Jun 23 20:40 mt7915_wa.bin
+-rw-r--r--    1 root     root       1260960 Jun 23 20:40 mt7915_wm.bin

@@ -1,0 +1,19 @@
+Filesystem                Size      Used Available Use% Mounted on
+/dev/root                 9.3M      9.3M         0 100% /rom
+tmpfs                   121.6M      1.6M    120.0M   1% /tmp
+/dev/ubi0_1              26.4M     64.0K     25.0M   0% /overlay
+overlayfs:/overlay       26.4M     64.0K     25.0M   0% /
+tmpfs                   512.0K         0    512.0K   0% /dev
+
+/dev/root on /rom type squashfs (ro,relatime,errors=continue)
+proc on /proc type proc (rw,nosuid,nodev,noexec,relatime)
+sysfs on /sys type sysfs (rw,nosuid,nodev,noexec,relatime)
+cgroup2 on /sys/fs/cgroup type cgroup2 (rw,nosuid,nodev,noexec,relatime,nsdelegate)
+tmpfs on /tmp type tmpfs (rw,nosuid,nodev,noatime)
+/dev/ubi0_1 on /overlay type ubifs (rw,noatime,assert=read-only,ubi=0,vol=1)
+overlayfs:/overlay on / type overlay (rw,noatime,lowerdir=/,upperdir=/overlay/upper,workdir=/overlay/work)
+tmpfs on /dev type tmpfs (rw,nosuid,noexec,noatime,size=512k,mode=755)
+devpts on /dev/pts type devpts (rw,nosuid,noexec,noatime,mode=600,ptmxmode=000)
+debugfs on /sys/kernel/debug type debugfs (rw,nosuid,nodev,noexec,noatime)
+bpffs on /sys/fs/bpf type bpf (rw,nosuid,nodev,noexec,noatime,mode=700)
+mountd(pid2645) on /tmp/run/blockd type autofs (rw,relatime,fd=7,pgrp=2645,timeout=30,minproto=5,maxproto=5,indirect)

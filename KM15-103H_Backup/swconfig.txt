@@ -1,0 +1,22 @@
+Failed to connect to the switch. Use the "list" command to see which switches are available.
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1504 qdisc mq state UP mode DEFAULT group default qlen 1000
+    link/ether 0c:96:cd:9f:cb:1a brd ff:ff:ff:ff:ff:ff
+3: wan@eth0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue state LOWERLAYERDOWN mode DEFAULT group default qlen 1000
+    link/ether 0c:96:cd:9f:cb:19 brd ff:ff:ff:ff:ff:ff
+4: lan4@eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-lan state UP mode DEFAULT group default qlen 1000
+    link/ether 0c:96:cd:9f:cb:1a brd ff:ff:ff:ff:ff:ff
+5: lan3@eth0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue master br-lan state LOWERLAYERDOWN mode DEFAULT group default qlen 1000
+    link/ether 0c:96:cd:9f:cb:1a brd ff:ff:ff:ff:ff:ff
+6: lan2@eth0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-lan state UP mode DEFAULT group default qlen 1000
+    link/ether 0c:96:cd:9f:cb:1a brd ff:ff:ff:ff:ff:ff
+7: lan1@eth0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue master br-lan state LOWERLAYERDOWN mode DEFAULT group default qlen 1000
+    link/ether 0c:96:cd:9f:cb:1a brd ff:ff:ff:ff:ff:ff
+8: br-lan: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue state UP mode DEFAULT group default qlen 1000
+    link/ether 0c:96:cd:9f:cb:1a brd ff:ff:ff:ff:ff:ff
+9: phy1-sta0: <NO-CARRIER,BROADCAST,MULTICAST,UP> mtu 1500 qdisc noqueue master br-lan state DOWN mode DORMANT group default qlen 1000
+    link/ether 0c:96:cd:9f:cb:1c brd ff:ff:ff:ff:ff:ff
+10: phy0-ap0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc noqueue master br-lan state UP mode DEFAULT group default qlen 1000
+    link/ether 0c:96:cd:9f:cb:1b brd ff:ff:ff:ff:ff:ff
+ash: bridge: not found

@@ -1,0 +1,79 @@
+name: Build Custom OpenWrt for Mercury KM15-103H (HE160)
+
+on:
+  push:
+    paths:
+      - 'mercury_km15_103h_build/**'
+      - 'scripts/mercury-*.sh'
+      - '.github/workflows/build_mercury_km15_103h.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build OpenWrt for Mercury KM15-103H
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Linux Build Environment
+        env:
+          DEBIAN_FRONTEND: noninteractive
+        run: |
+          sudo find /etc/apt/ -type f -exec sed -i 's/azure.archive.ubuntu.com/mirrors.kernel.org/g' {} + 2>/dev/null || true
+          sudo find /etc/apt/ -type f -exec sed -i 's/archive.ubuntu.com/mirrors.kernel.org/g' {} + 2>/dev/null || true
+          sudo find /etc/apt/ -type f -exec sed -i 's/security.ubuntu.com/mirrors.kernel.org/g' {} + 2>/dev/null || true
+          sudo apt-get clean
+          sudo apt-get update -o Acquire::ForceIPv4=true -o Acquire::Retries=3
+          sudo apt-get install -y --no-install-recommends -o Acquire::ForceIPv4=true -o Acquire::Retries=3 \
+            build-essential clang flex bison g++ gawk gcc-multilib g++-multilib gettext git \
+            libncurses5-dev libssl-dev python3-distutils python3-setuptools rsync unzip zlib1g-dev \
+            file wget device-tree-compiler python3-pip swig libelf-dev
+
+      - name: Clone OpenWrt Source
+        run: |
+          git clone --depth 1 --branch v24.10.2 https://git.openwrt.org/openwrt/openwrt.git openwrt
+          cd openwrt
+          ./scripts/feeds update -a
+          ./scripts/feeds install -a
+
+      - name: Setup Device Tree
+        run: bash scripts/mercury-01-setup-dts.sh
+
+      - name: Patch Makefiles and Device Target
+        run: bash scripts/mercury-02-patch-makefiles.sh
+
+      - name: Patch Platform for Safe Dual-Slot Sysupgrade
+        run: bash scripts/mercury-03-patch-platform.sh
+
+      - name: Configure OpenWrt and Inject Unlocked 160MHz Files
+        run: bash scripts/mercury-04-configure.sh
+
+      - name: Download Build Dependencies
+        run: |
+          cd openwrt
+          make download -j8
+
+      - name: Compile Firmware
+        run: bash scripts/mercury-05-compile.sh
+
+      - name: Upload Flashable Firmware Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mercury_KM15-103H_SuperFirmware_HE160
+          path: |
+            openwrt/bin/targets/ramips/mt7621/*mercury_km15-103h*sysupgrade.bin
+            openwrt/bin/targets/ramips/mt7621/*mercury_km15-103h*.manifest
+            openwrt/bin/targets/ramips/mt7621/sha256sums
+          if-no-files-found: error
+
+      - name: Upload Build Log on Failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: FAILED-BUILD-LOG
+          path: |
+            openwrt/build.log
+            openwrt/logs/
+          if-no-files-found: warn

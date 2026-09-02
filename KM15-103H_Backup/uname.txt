@@ -1,0 +1,2 @@
+Linux WitWrt-KM15-103H 6.6.93 #0 SMP Mon Jun 23 20:40:36 2025 mips GNU/Linux
+Linux version 6.6.93 (Wit-Dev@witwrt.com) (mipsel-openwrt-linux-musl-gcc (OpenWrt GCC 13.3.0 r28739-d9340319c6) 13.3.0, GNU ld (GNU Binutils) 2.42) #0 SMP Mon Jun 23 20:40:36 2025

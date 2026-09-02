@@ -1,0 +1,13 @@
+major minor  #blocks  name
+
+  31        0        512 mtdblock0
+  31        1        256 mtdblock1
+  31        2        512 mtdblock2
+  31        3      49152 mtdblock3
+  31        4       3200 mtdblock4
+  31        5      45056 mtdblock5
+  31        6      49152 mtdblock6
+  31        7       3200 mtdblock7
+  31        8      45056 mtdblock8
+  31        9      23040 mtdblock9
+ 254        0       9424 ubiblock0_0

@@ -1,0 +1,23 @@
+import paramiko
+
+ssh = paramiko.SSHClient()
+ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+ssh.connect('192.168.77.1', 22, 'root', 'Admin-12345', timeout=10)
+
+cmds = [
+    'strings /lib/modules/6.6.93/mt7915e.ko | grep -i 160 | head -n 30',
+    'strings /lib/modules/6.6.93/mt76-connac-lib.ko | grep -i 160 | head -n 30',
+    'strings /lib/firmware/mediatek/mt7915_wm.bin | grep -i "160" | head -n 30'
+]
+
+for cmd in cmds:
+    print(f"\n=================== {cmd} ===================")
+    stdin, stdout, stderr = ssh.exec_command(cmd)
+    out = stdout.read().decode('utf-8', errors='replace').strip()
+    if out:
+        print(out)
+    err = stderr.read().decode('utf-8', errors='replace').strip()
+    if err:
+        print("[ERR]:", err)
+
+ssh.close()

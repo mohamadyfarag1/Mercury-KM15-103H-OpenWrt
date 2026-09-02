@@ -1,0 +1,49 @@
+[    0.000000] SoC Type: MediaTek MT7621 ver:1 eco:3
+[    0.000000] MIPS: machine is Mercury KM15-103H
+[    0.000000] Movable zone start for each node
+[    0.439458] mt7621-pinctrl pinctrl: there is not valid maps for state default
+[    0.605168] mt7621_gpio 1e000600.gpio: registering 32 gpios
+[    0.611128] mt7621_gpio 1e000600.gpio: registering 32 gpios
+[    0.617276] mt7621_gpio 1e000600.gpio: registering 32 gpios
+[    0.623647] mt7621-pci 1e140000.pcie: host bridge /pcie@1e140000 ranges:
+[    0.630329] mt7621-pci 1e140000.pcie:   No bus range found for /pcie@1e140000, using [bus 00-ff]
+[    0.639122] mt7621-pci 1e140000.pcie:      MEM 0x0060000000..0x006fffffff -> 0x0060000000
+[    0.647282] mt7621-pci 1e140000.pcie:       IO 0x001e160000..0x001e16ffff -> 0x0000000000
+[    1.013285] mt7621-pci 1e140000.pcie: pcie2 no card, disable it (RST & CLK)
+[    1.020192] mt7621-pci 1e140000.pcie: PCIE0 enabled
+[    1.025081] mt7621-pci 1e140000.pcie: PCIE1 enabled
+[    1.037238] mt7621-pci 1e140000.pcie: PCI host bridge to bus 0000:00
+[    1.121328] pci 0000:00:00.0: bridge configuration invalid ([bus 00-00]), reconfiguring
+[    1.129328] pci 0000:00:01.0: bridge configuration invalid ([bus 00-00]), reconfiguring
+[    1.315291] pci 0000:00:00.0: BAR 0: failed to assign [mem size 0x80000000]
+[    1.328758] pci 0000:00:01.0: BAR 0: failed to assign [mem size 0x80000000]
+[    1.509704] 1e000c00.uartlite: ttyS0 at MMIO 0x1e000c00 (irq = 18, base_baud = 3125000) is a 16550A
+[    1.559520] mt7621-nand 1e003000.nand: ECC strength adjusted to 4 bits
+[    1.572961] NMBM management region starts at block 960 [0x07800000]
+[    1.608178] 6 fixed-partitions partitions found on MTD device mt7621-nand
+[    1.615678] Creating 6 MTD partitions on "mt7621-nand":
+[    1.642595] 0x000000100000-0x000000180000 : "Factory"
+[    2.148590] 2 fit-fw partitions found on MTD device firmware
+[    2.154330] Creating 2 MTD partitions on "firmware":
+[    3.140727] 2 fit-fw partitions found on MTD device firmware2
+[    3.146550] Creating 2 MTD partitions on "firmware2":
+[    4.058307] i2c-mt7621 1e000900.i2c: clock 100 kHz
+[    5.094088] ubi0: background thread "ubi_bgt0d" started, PID 468
+[   17.167225] UBIFS (ubi0:1): background thread "ubifs_bgt0_1" started, PID 663
+[   17.489850] UBIFS (ubi0:1): background thread "ubifs_bgt0_1" started, PID 666
+[   20.778808] urngd: v1.0.2 started.
+[   21.189305] mt7915e_hif 0000:01:00.0: enabling device (0000 -> 0002)
+[   21.202019] mt7915e 0000:02:00.0: enabling device (0000 -> 0002)
+[   21.431634] mt7915e 0000:02:00.0: HW/SW Version: 0x8a108a10, Build Time: 20240429200716a
+[   21.713997] mt7915e 0000:02:00.0: WM Firmware Version: ____000000, Build Time: 20240429200752
+[   21.752335] mt7915e 0000:02:00.0: WA Firmware Version: DEV_000000, Build Time: 20240429200812
+[   21.895890] mt7915e 0000:02:00.0: registering led 'mt76-phy0'
+[   21.968336] mt7915e 0000:02:00.0: registering led 'mt76-phy1'
+[   39.211934] mt7915e 0000:02:00.0 phy1-sta0: entered allmulticast mode
+[   39.219076] mt7915e 0000:02:00.0 phy1-sta0: entered promiscuous mode
+[   39.230423] mt7915e 0000:02:00.0 phy1-sta0: left allmulticast mode
+[   39.236849] mt7915e 0000:02:00.0 phy1-sta0: left promiscuous mode
+[   39.342267] mt7915e 0000:02:00.0 phy1-sta0: entered allmulticast mode
+[   39.349418] mt7915e 0000:02:00.0 phy1-sta0: entered promiscuous mode
+[   39.732135] mt7915e 0000:02:00.0 phy0-ap0: entered allmulticast mode
+[   39.739488] mt7915e 0000:02:00.0 phy0-ap0: entered promiscuous mode
