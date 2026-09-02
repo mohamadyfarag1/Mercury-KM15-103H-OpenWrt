@@ -317,6 +317,16 @@ mercury_do_upgrade() {
 		return 1
 	fi
 
+	echo "Mercury: Arming boot failsafe (revert to slot $current_slot if slot $target_slot does not come up healthy)..."
+	if mercury_mount_data; then
+		echo "prev_slot=$current_slot" > "$MERCURY_DATA_MOUNT/pending_boot"
+		echo "new_slot=$target_slot" >> "$MERCURY_DATA_MOUNT/pending_boot"
+		sync
+		mercury_umount_data
+	else
+		echo "Mercury: WARNING - Could not arm boot failsafe (priv_data unavailable), continuing without it"
+	fi
+
 	echo "Mercury: Upgrade complete! Rebooting to slot $target_slot..."
 	sync
 	reboot -f

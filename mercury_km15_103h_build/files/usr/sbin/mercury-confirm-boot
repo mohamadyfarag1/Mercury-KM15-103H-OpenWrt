@@ -1,0 +1,22 @@
+#!/bin/sh
+# Manually commit the current boot slot after a Mercury sysupgrade, cancelling
+# the automatic failsafe revert (see /etc/init.d/95mercuryfailsafe).
+# Run this over SSH as soon as you've confirmed the new firmware is good.
+
+. /lib/upgrade/mercury.sh
+
+if ! mercury_mount_data; then
+	echo "ERROR: priv_data volume unavailable, cannot confirm"
+	exit 1
+fi
+
+if [ ! -f "$MERCURY_DATA_MOUNT/pending_boot" ]; then
+	echo "Nothing pending: this boot is already committed."
+	mercury_umount_data
+	exit 0
+fi
+
+rm -f "$MERCURY_DATA_MOUNT/pending_boot"
+sync
+mercury_umount_data
+echo "Confirmed. This slot is now permanent; the failsafe watchdog will not revert it."
