@@ -22,7 +22,9 @@ define Device/mercury_km15-103h
   DEVICE_DTS := mt7621_mercury_km15-103h
   SUPPORTED_DEVICES := mercury,km15-103h
   DEVICE_PACKAGES := kmod-mt7915e mt7915-firmware uboot-envtools luci luci-ssl iwinfo wireless-regdb
+  KERNEL_INITRAMFS := $$(KERNEL)
   IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+  IMAGE/initramfs-kernel.bin := append-kernel
 endef
 TARGET_DEVICES += mercury_km15-103h
 

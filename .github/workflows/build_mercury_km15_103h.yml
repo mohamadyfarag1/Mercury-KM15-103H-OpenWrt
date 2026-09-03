@@ -114,6 +114,19 @@ jobs:
             openwrt/bin/targets/ramips/mt7621/sha256sums
           if-no-files-found: error
 
+      # Recovery artifact: u-boot.bin + initramfs-kernel.bin + instructions.
+      # Use when: device is bricked OR you want to flash from a clean NAND state.
+      # Procedure: short NAND Pin 9 (#CE) -> Ymodem u-boot.bin -> loady -> bootm
+      # -> OpenWrt in RAM -> sysupgrade -n sysupgrade.bin
+      # See recovery_files/HOW_TO_USE.txt for full step-by-step instructions.
+      - name: Upload UART Recovery Files (u-boot + initramfs + instructions)
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mercury_KM15-103H_UART_Recovery
+          path: recovery_files/
+          if-no-files-found: warn
+
       # A failed build still leaves partial images on disk. Ship only the
       # build log so that a rejected image can never accidentally be flashed.
       - name: Upload build log only (build or verification failed)

@@ -55,6 +55,17 @@ CONFIG_TARGET_ROOTFS_SQUASHFS=y
 CONFIG_TARGET_ROOTFS_UBIFS=y
 CONFIG_TARGET_UBIFS_COMPRESSION_ZSTD=y
 
+# Initramfs image for UART Ymodem recovery boot.
+# When CE# is shorted on the NAND, SPL enters Ymodem mode.
+# Send u-boot.bin first, then use 'loady 0x84000000' + 'bootm'
+# to load this initramfs image into RAM. OpenWrt runs from RAM,
+# allowing 'sysupgrade -n' to write to NAND without anything mounted.
+CONFIG_TARGET_RAMDISK=y
+
+# Build the U-Boot binary so it can be sent via Ymodem to the SPL.
+# Binary ends up in build_dir as u-boot-mt7621/u-boot.bin.
+CONFIG_PACKAGE_uboot-mt7621=y
+
 EOF
 
 echo "Running make defconfig..."

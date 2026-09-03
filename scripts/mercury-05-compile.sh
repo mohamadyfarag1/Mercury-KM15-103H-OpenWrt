@@ -266,6 +266,83 @@ echo "md5   : $(md5sum "$IMAGE_FILE" | awk '{print $1}')"
 echo "======================================="
 
 # ---------------------------------------------------------------
+# Step 9.7: Collect recovery files (u-boot binary + initramfs image)
+# into a single directory so CI can upload them as one artifact.
+#
+# u-boot binary: needed to respond to the SPL Ymodem prompt when
+#   NAND CE# is shorted. SPL loads it into RAM → interactive U-Boot
+#   console → loady 0x84000000 → bootm → OpenWrt in RAM.
+#
+# initramfs-kernel.bin: OpenWrt running 100% from RAM. From SSH,
+#   run 'sysupgrade -n <image.bin>' to write to NAND permanently,
+#   or erase+repartition NAND before flashing.
+# ---------------------------------------------------------------
+echo "======================================="
+echo "Step 9.7: Collecting UART recovery files..."
+echo "======================================="
+RECOVERY_DIR="../recovery_files"
+mkdir -p "$RECOVERY_DIR"
+
+# Find u-boot binary (built by CONFIG_PACKAGE_uboot-mt7621)
+UBOOT_BIN=$(find build_dir -name "u-boot.bin" \
+    -path "*/uboot-mt7621*" 2>/dev/null | head -n1)
+if [ -n "$UBOOT_BIN" ]; then
+    cp "$UBOOT_BIN" "$RECOVERY_DIR/u-boot-mt7621.bin"
+    echo "  OK: u-boot binary  ($(wc -c < "$RECOVERY_DIR/u-boot-mt7621.bin") bytes)"
+else
+    echo "  WARN: u-boot-mt7621.bin not found - check CONFIG_PACKAGE_uboot-mt7621=y"
+fi
+
+# Find initramfs kernel image
+INITRAMFS=$(find "$BIN_DIR" -name "*mercury_km15-103h*initramfs*" 2>/dev/null | head -n1)
+if [ -n "$INITRAMFS" ]; then
+    cp "$INITRAMFS" "$RECOVERY_DIR/$(basename "$INITRAMFS")"
+    echo "  OK: initramfs image ($(wc -c < "$INITRAMFS") bytes)"
+else
+    echo "  WARN: initramfs-kernel.bin not found"
+    echo "        Add KERNEL_INITRAMFS + IMAGE/initramfs-kernel.bin to device def"
+fi
+
+# Write the U-Boot boot commands to a README
+cat > "$RECOVERY_DIR/HOW_TO_USE.txt" << 'HOWTO'
+Mercury KM15-103H UART Recovery Procedure
+==========================================
+
+STEP 1 - Get U-Boot running in RAM:
+  1. Connect UART (115200 8N1) + Tera Term
+  2. Power on the device
+  3. When SPL starts printing, short NAND Pin 9 (#CE) to GND
+  4. Wait for: "Accepted mode is Ymodem-1K."
+  5. In Tera Term: File > Transfer > YMODEM > Send > pick u-boot-mt7621.bin
+  6. U-Boot boots into RAM -> you get a "#" prompt
+
+STEP 2 - Load OpenWrt initramfs into RAM:
+  At the U-Boot "#" prompt:
+    loady 0x84000000
+  In Tera Term: File > Transfer > YMODEM > Send -> pick *-initramfs-kernel.bin
+  Then:
+    bootm 0x84000000
+  OpenWrt boots from RAM (no NAND mounted).
+
+STEP 3 - Flash to NAND permanently:
+  SSH into 192.168.1.1 (default IP in initramfs):
+    scp *-sysupgrade.bin root@192.168.1.1:/tmp/
+    ssh root@192.168.1.1 "sysupgrade -n /tmp/*-sysupgrade.bin"
+
+STEP 4 (OPTIONAL) - Erase and repartition NAND before flashing:
+  From initramfs SSH (DANGER - erases everything except Bootloader/Factory):
+    flash_erase /dev/mtd2 0 0   # Config
+    flash_erase /dev/mtd3 0 0   # firmware
+    flash_erase /dev/mtd4 0 0   # firmware2
+    flash_erase /dev/mtd5 0 0   # Userdata
+  Then do sysupgrade as in Step 3.
+
+NOTE: NEVER erase /dev/mtd0 (Bootloader) or /dev/mtd1 (Factory).
+      Factory contains WiFi calibration - losing it kills the radio.
+HOWTO
+echo "  OK: HOW_TO_USE.txt written"
+
+# ---------------------------------------------------------------
 # Step 10: Release summary on the CI run page.
 # ---------------------------------------------------------------
 if [ -n "$GITHUB_STEP_SUMMARY" ]; then
