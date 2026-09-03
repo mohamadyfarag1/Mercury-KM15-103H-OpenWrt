@@ -1,0 +1,209 @@
+#!/bin/sh
+# =============================================
+# Mercury KM15-103H - Wi-Fi self-check
+#
+# Every Wi-Fi failure this build has encountered was SILENT:
+# a regulatory file not injected, a channel "available" in the
+# UI but flagged (disabled) in the driver, power stuck at 0 dBm
+# because the regdb applied a 0-dBm rule. None of them announce
+# themselves - you find out when the radio stays down or iperf
+# returns almost nothing.
+#
+# This script prints the facts that separate those cases.
+# Run it over SSH after a fresh flash:
+#
+#     mercury-wifi-check
+#
+# It only reads. It changes nothing.
+# =============================================
+
+PROBLEMS=0
+FWDIR=/lib/firmware/mediatek
+
+say() {
+    echo "$*"
+    [ -n "$MERCURY_TO_LOG" ] && logger -t mercury-wifi "$*"
+}
+
+problem() {
+    PROBLEMS=$((PROBLEMS + 1))
+    say "FAIL: $*"
+}
+
+say "===== Mercury KM15-103H Wi-Fi self-check ====="
+
+# --- 1. MT7915 firmware blobs -----------------------------------------
+# Three files are needed for the mt7915e driver to probe successfully.
+# If any is missing, both radios stay down with no userspace warning.
+say "--- mt7915 firmware ---"
+ALL_FW_OK=1
+for FW in mt7915_rom_patch.bin mt7915_wa.bin mt7915_wm.bin; do
+    if [ -f "$FWDIR/$FW" ]; then
+        say "  $FW : $(wc -c < "$FWDIR/$FW") bytes"
+    else
+        problem "$FWDIR/$FW is MISSING - mt7915e will fail at probe."
+        ALL_FW_OK=0
+    fi
+done
+[ "$ALL_FW_OK" -eq 1 ] && say "  all firmware blobs present"
+
+# --- 2. Did the driver attach? ----------------------------------------
+say "--- driver attach ---"
+if dmesg 2>/dev/null | grep -q "mt7915e.*enabling device"; then
+    say "  mt7915e: device enabled (PCIe probe OK)"
+else
+    problem "no 'mt7915e enabling device' in dmesg - driver did not probe."
+fi
+
+if dmesg 2>/dev/null | grep -qi "fail to load firmware"; then
+    problem "mt7915e firmware load FAILED - both radios dead."
+    dmesg | grep -i "firmware" | tail -5 | while read -r l; do say "  $l"; done
+fi
+
+PHYS=$(ls /sys/class/ieee80211/ 2>/dev/null | tr '\n' ' ')
+if [ -z "$PHYS" ]; then
+    problem "no phy registered - Wi-Fi driver did not load."
+else
+    say "  phys: $PHYS"
+fi
+
+# --- 3. Regulatory database -------------------------------------------
+say "--- regulatory ---"
+if [ -f /lib/firmware/regulatory.db ]; then
+    REGDB_SZ=$(wc -c < /lib/firmware/regulatory.db)
+    say "  regulatory.db : $REGDB_SZ bytes"
+    if [ "$REGDB_SZ" -lt 5000 ]; then
+        problem "regulatory.db looks like the stock (restricted) database."
+        say "         Custom unlocked db should be > 5000 bytes."
+        say "         Extended channels will be blocked or power-limited."
+    fi
+else
+    problem "regulatory.db missing - extended channels blocked."
+fi
+iw reg get 2>/dev/null | grep -E "^(global|country)|@" | while read -r l; do
+    say "  reg: $l"
+done
+
+# --- 4. Per-radio channel census --------------------------------------
+# This catches the 0 dBm class of failure: a channel the UI offers
+# but the regdb restricts appears with power 0.0 dBm. Selecting it
+# makes hostapd fail with "Could not determine operating frequency"
+# and the radio goes silent. Count channels and flag any at 0 dBm.
+say "--- channel census ---"
+for PHYPATH in /sys/class/ieee80211/*; do
+    [ -e "$PHYPATH" ] || continue
+    PHY=$(basename "$PHYPATH")
+    INFO=$(iw phy "$PHY" info 2>/dev/null)
+    [ -n "$INFO" ] || continue
+
+    CHANS=$(echo "$INFO" | grep -c "MHz \[")
+    DIS=$(echo "$INFO"   | grep "MHz \[" | grep -c "disabled")
+    ZERO=$(echo "$INFO"  | grep "MHz \[" | grep -c "(0\.0 dBm)")
+    LIVE=$((CHANS - DIS))
+
+    say "  $PHY : $CHANS channels, $LIVE usable, $DIS disabled, $ZERO at 0.0 dBm"
+
+    if [ "$ZERO" -gt 0 ]; then
+        problem "$PHY has $ZERO channel(s) at 0.0 dBm:"
+        echo "$INFO" | grep "MHz \[" | grep "(0\.0 dBm)" | head -n 8 |
+            while read -r l; do say "            $l"; done
+    fi
+
+    # 5 GHz sanity: the mt76_channels_5ghz[] table has 28 channels
+    # (36-177) and the custom regdb unlocks all of them. If the count
+    # is much lower, the regdb was not injected or the driver has an
+    # older channel table.
+    IS5G=$(echo "$INFO" | grep -c "51[0-9][0-9]\|52[0-9][0-9]\|58[0-9][0-9]")
+    if [ "$IS5G" -gt 0 ] && [ "$CHANS" -lt 25 ]; then
+        problem "$PHY shows only $CHANS 5 GHz channels (expected >= 28)."
+        say "            The custom regdb may not be in the image."
+    fi
+
+    # Check 160 MHz capability
+    if [ "$IS5G" -gt 0 ]; then
+        if echo "$INFO" | grep -q "160 MHz"; then
+            say "  $PHY : 160 MHz capability confirmed"
+        else
+            say "  $PHY : WARNING - 160 MHz not listed in capabilities"
+        fi
+    fi
+done
+
+# --- 5. Link quality on associated links ------------------------------
+# A fully unlocked channel map does not guarantee a fast link. Two
+# faults that quietly cut throughput in half are invisible above:
+#
+#   * 3x3 MT7915E settling at 2 spatial streams (or fewer) while
+#     the channel census still says OK. Check NSS in the bitrate.
+#
+#   * Receiver overload: two units on a bench 30 cm apart at high
+#     TX power arrive near -1 dBm. The LNA compresses, MCS collapses,
+#     while signal still reads "excellent". DROP TX POWER.
+say "--- link quality ---"
+for IFACE in $(iw dev 2>/dev/null | sed -n 's/^[[:space:]]*Interface //p'); do
+    DUMP=$(iw dev "$IFACE" station dump 2>/dev/null)
+    [ -n "$DUMP" ] || continue
+
+    RXR=$(echo "$DUMP" | sed -n 's/.*rx bitrate:[[:space:]]*//p' | head -n 1)
+    TXR=$(echo "$DUMP" | sed -n 's/.*tx bitrate:[[:space:]]*//p' | head -n 1)
+    say "  $IFACE : rx ${RXR:-unknown}"
+    say "            tx ${TXR:-unknown}"
+
+    # How many chains the radio has (popcount of antenna mask)
+    PHY=$(cat "/sys/class/net/$IFACE/phy80211/name" 2>/dev/null)
+    NCHAIN=0
+    MASK=$(iw phy "$PHY" info 2>/dev/null |
+           sed -n 's/.*Available Antennas: TX \(0x[0-9a-fA-F]*\).*/\1/p' | head -n 1)
+    if [ -n "$MASK" ]; then
+        M=$(printf '%d' "$MASK" 2>/dev/null || echo 0)
+        while [ "$M" -gt 0 ]; do
+            NCHAIN=$((NCHAIN + M % 2))
+            M=$((M / 2))
+        done
+    fi
+
+    if [ "$NCHAIN" -ge 2 ] && echo "$RXR$TXR" | grep -q "NSS 1"; then
+        problem "$IFACE negotiated ONE spatial stream on a ${NCHAIN}x${NCHAIN} radio."
+        say "            That halves the rate. Usual causes: two units too close"
+        say "            (LOS rank-1 channel), same-polarity antennas, or one"
+        say "            chain far weaker than the other."
+    fi
+
+    # Per-chain signal spread
+    CHAINS=$(echo "$DUMP" | awk '$1 == "signal:" {
+                 s = $0; sub(/.*\[/, "", s); sub(/\].*/, "", s); print s; exit }')
+    if [ -n "$CHAINS" ]; then
+        SPREAD=$(echo "$CHAINS" | tr ',' '\n' | awk '
+            { v = $1 + 0
+              if (v > -80) { if (n++ == 0) { lo = v; hi = v }
+                             if (v < lo) lo = v
+                             if (v > hi) hi = v } }
+            END { if (n > 1) print hi - lo; else print 0 }')
+        say "            chains [$CHAINS ] spread ${SPREAD} dB"
+        if [ "${SPREAD:-0}" -gt 10 ]; then
+            problem "$IFACE chain spread is ${SPREAD} dB (> 10 dB threshold)."
+            say "            Move or rotate the unit: if the spread follows the"
+            say "            geometry it is a near-field null. If it stays put,"
+            say "            swap antennas - follows cable/board, not geometry."
+        fi
+    fi
+
+    # Receiver overload check
+    RSSI=$(echo "$DUMP" | awk '$1 == "signal:" { print $2 + 0; exit }')
+    if [ -n "$RSSI" ] && [ "$RSSI" -gt -30 ]; then
+        problem "$IFACE receiving at ${RSSI} dBm - too hot (LNA compression)."
+        say "            Strong signal + poor MCS = front end is saturated."
+        say "            LOWER tx power (10-15 dBm). Raising it makes this worse."
+    fi
+done
+
+# --- 6. Verdict -------------------------------------------------------
+say "============================================="
+if [ "$PROBLEMS" -eq 0 ]; then
+    say "result : OK - no problems found"
+else
+    say "result : $PROBLEMS problem(s) found - see FAIL lines above"
+fi
+say "============================================="
+
+exit 0

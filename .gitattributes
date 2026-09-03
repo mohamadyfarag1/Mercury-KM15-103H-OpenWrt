@@ -1,6 +1,24 @@
-* text=auto eol=lf
-*.sh text eol=lf
-*.dts text eol=lf
-*.yml text eol=lf
-*.bin binary
-*.dtb binary
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Scripts and device rootfs files run on Linux - they MUST keep LF
+# regardless of core.autocrlf on the checkout machine. A CRLF in a
+# shebang line turns into "#!/bin/sh\r", which the device kernel
+# rejects as "interpreter not found" - a confusing error that names
+# the shell rather than the script.
+scripts/**                  text eol=lf
+mercury_km15_103h_build/**  text eol=lf
+*.sh                        text eol=lf
+*.yml                       text eol=lf
+*.dts                       text eol=lf
+*.py                        text eol=lf
+
+# Never normalize calibration / firmware blobs. "text=auto" avoids
+# them when the heuristic detects NUL bytes, but make it explicit:
+# a single corrupted byte caused by CRLF conversion in a binary blob
+# would corrupt the EEPROM/precal data and brick the radio.
+# These rules come LAST so they override the eol=lf rules above.
+# "!eol" removes the end-of-line attribute outright rather than
+# relying on -text alone.
+*.bin -text !eol
+*.dtb -text !eol

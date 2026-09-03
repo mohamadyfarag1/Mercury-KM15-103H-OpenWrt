@@ -9,6 +9,11 @@ cd openwrt
 echo "Injecting custom overlay files from mercury_km15_103h_build/files..."
 mkdir -p files
 cp -r ../mercury_km15_103h_build/files/* files/
+# Shell scripts in the overlay must be executable on the device; git on
+# Windows strips the +x bit, so set it explicitly here after the copy.
+find files/usr/bin -type f -exec chmod +x {} \;
+find files/usr/sbin -type f -exec chmod +x {} \; 2>/dev/null || true
+find files/etc/init.d -type f -exec chmod +x {} \; 2>/dev/null || true
 
 echo "Writing target .config for Mercury KM15-103H..."
 cat << 'EOF' > .config

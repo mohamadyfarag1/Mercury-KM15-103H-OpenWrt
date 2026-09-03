@@ -1,4 +1,4 @@
-name: Build Custom OpenWrt for Mercury KM15-103H (HE160)
+name: Build Custom OpenWrt for Mercury KM15-103H (HE160 Superchannel)
 
 on:
   push:
@@ -7,6 +7,13 @@ on:
       - 'scripts/mercury-*.sh'
       - '.github/workflows/build_mercury_km15_103h.yml'
   workflow_dispatch:
+
+# Two pushes in quick succession would otherwise run two full ~35 minute
+# builds against the same cache, uploading two artifacts with the same
+# name where the second finishes wins regardless of which commit it built.
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build:
@@ -47,7 +54,7 @@ jobs:
       - name: Patch Platform for Safe Dual-Slot Sysupgrade
         run: bash scripts/mercury-03-patch-platform.sh
 
-      - name: Configure OpenWrt and Inject Unlocked 160MHz Files
+      - name: Configure OpenWrt
         run: bash scripts/mercury-04-configure.sh
 
       - name: Download Build Dependencies
@@ -55,10 +62,38 @@ jobs:
           cd openwrt
           make download -j8
 
-      - name: Compile Firmware
+      - name: Compile Firmware (regdb + superchannel patches + build + verify)
         run: bash scripts/mercury-05-compile.sh
 
+      # What actually shipped, on the run page instead of buried in the
+      # compile log. The checksums are the ones to compare after downloading
+      # the artifact - a truncated download flashes as willingly as a good
+      # image and only fails once it is on the device.
+      - name: Release summary
+        if: success()
+        run: |
+          OUT=openwrt/bin/targets/ramips/mt7621
+          {
+            echo "## Mercury KM15-103H firmware built"
+            echo
+            echo "commit \`${GITHUB_SHA:0:12}\` on \`${GITHUB_REF_NAME}\`"
+            echo
+            echo "| image | size | sha256 |"
+            echo "|---|---|---|"
+            for f in "$OUT"/*mercury_km15-103h*.bin; do
+              [ -f "$f" ] || continue
+              printf '| %s | %s | `%s` |\n' \
+                "$(basename "$f")" \
+                "$(du -h "$f" | cut -f1)" \
+                "$(sha256sum "$f" | cut -c1-16)..."
+            done
+            echo
+            echo "Flash \`*-squashfs-sysupgrade.bin\` **without** \"Keep settings\","
+            echo "then run \`mercury-wifi-check\` over SSH to confirm the radios came up."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Upload Flashable Firmware Artifact
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: Mercury_KM15-103H_SuperFirmware_HE160
@@ -68,11 +103,13 @@ jobs:
             openwrt/bin/targets/ramips/mt7621/sha256sums
           if-no-files-found: error
 
-      - name: Upload Build Log on Failure
+      # A failed build still leaves partial images on disk. Ship only the
+      # build log so that a rejected image can never accidentally be flashed.
+      - name: Upload build log only (build or verification failed)
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: FAILED-BUILD-LOG
+          name: FAILED-BUILD-LOG-DO-NOT-FLASH
           path: |
             openwrt/build.log
             openwrt/logs/
