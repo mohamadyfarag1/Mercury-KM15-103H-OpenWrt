@@ -16,11 +16,9 @@ else
     cat << 'EOF' >> "$MK_FILE"
 
 define Device/mercury_km15-103h
-  $(Device/dsa-migration)
   IMAGE_SIZE := 50331648
   DEVICE_VENDOR := Mercury
   DEVICE_MODEL := KM15-103H
-  DEVICE_COMPAT_VERSION := 1.1
   DEVICE_DTS := mt7621_mercury_km15-103h
   SUPPORTED_DEVICES := mercury,km15-103h
   DEVICE_PACKAGES := kmod-mt7915e mt7915-firmware uboot-envtools luci luci-ssl iwinfo wireless-regdb
