@@ -50,9 +50,15 @@ make package/kernel/mt76/prepare V=s -j"$(nproc)"   2>&1 || true
 # Then we clean mt76 so the full build re-prepares it from the
 # patched source.
 # ---------------------------------------------------------------
+#
+# 2.3 GHz (2312-2402 MHz) is OFF by default. Set MERCURY_ENABLE_23GHZ=1
+# in the environment to include it - see the note in gen_mt76_patch.py
+# for why it is opt-in rather than always on.
+# ---------------------------------------------------------------
 echo "======================================="
 echo "Step 3: Extending mt76 channel table to 68 channels..."
 echo "======================================="
+echo "MERCURY_ENABLE_23GHZ = '${MERCURY_ENABLE_23GHZ:-(unset - 2.3 GHz disabled)}'"
 python3 ../scripts/gen_mt76_patch.py build_dir
 
 CTPATCH="package/kernel/mt76/patches/999-mercury-superchannels.patch"
@@ -127,7 +133,11 @@ if [ -z "$MT76_MAC" ]; then
     echo "!!!! mt76/mac80211.c not found in build_dir after compilation."
     exit 1
 fi
-CHAN5G_COUNT=$(grep -c 'CHAN5G(' "$MT76_MAC" 2>/dev/null || true)
+# Count only real array entries - CHAN5G(36, 5180). A plain
+# grep -c 'CHAN5G(' also counts the "#define CHAN5G(_idx, _freq)"
+# macro and reports 69 for a 68-channel table, which is exactly the
+# kind of off-by-one that turns a threshold check into a coin flip.
+CHAN5G_COUNT=$(grep -cE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" 2>/dev/null || true)
 echo "Shipped mt76 source : $MT76_MAC"
 echo "CHAN5G entries      : $CHAN5G_COUNT  (stock ~28, patched 68)"
 if [ "${CHAN5G_COUNT:-0}" -lt 60 ]; then
