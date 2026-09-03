@@ -17,6 +17,10 @@ if [ ! -f "$MERCURY_DATA_MOUNT/pending_boot" ]; then
 fi
 
 rm -f "$MERCURY_DATA_MOUNT/pending_boot"
+# The pre-upgrade rootfs backup (mercury_backup_rootfs, taken before
+# this boot's kernel+rootfs pair was written) is only needed for a
+# revert. Once confirmed, it just occupies space in priv_data.
+rm -f "$MERCURY_DATA_MOUNT/$MERCURY_ROOTFS_BACKUP"
 sync
 mercury_umount_data
 echo "Confirmed. This slot is now permanent; the failsafe watchdog will not revert it."

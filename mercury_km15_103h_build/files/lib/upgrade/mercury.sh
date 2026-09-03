@@ -5,7 +5,13 @@
 
 . /lib/functions.sh
 
-RAMFS_COPY_BIN='nandwrite flash_erase hexdump'
+# mercury_mount_data() (used by BOTH config backup and the new rootfs
+# backup/restore below) needs ubiattach/ubiformat/ubimkvol/ubinfo to set
+# up the priv_data volume, and mercury_backup_rootfs/restore_rootfs need
+# ubiupdatevol. All of these are separate mtd-utils binaries, not
+# busybox applets, so they must be listed here explicitly or they are
+# simply absent from the ramdisk stage2 runs in.
+RAMFS_COPY_BIN='nandwrite flash_erase hexdump ubiattach ubidetach ubiupdatevol ubiformat ubimkvol ubinfo'
 
 MERCURY_DATA_PART="Userdata"
 MERCURY_DATA_VOLUME="priv_data"
@@ -101,6 +107,150 @@ mercury_mount_data() {
 mercury_umount_data() {
 	umount "$MERCURY_DATA_MOUNT" 2>/dev/null
 	rm -rf "$MERCURY_DATA_MOUNT"
+}
+
+# ---------------------------------------------------------------------
+# UBI rootfs handling.
+#
+# This device's two firmware banks ("firmware" containers at mtd3 and
+# mtd6) each nominally have their OWN "kernel" and "ubi" sub-partitions
+# (mtd4/mtd5 for bank 1, mtd7/mtd8 for bank 2). It LOOKS like a full A/B
+# scheme, but it is not: both "ubi" sub-partitions are literally named
+# "ubi" in /proc/mtd, and the kernel's UBI auto-attach picks the FIRST
+# match - which is always mtd5, regardless of which bank's kernel is
+# currently running. Confirmed empirically on real hardware
+# (2026-09-03): booting with the Config-partition slot byte set to 2
+# (bank 2's kernel loads and runs - U-Boot prints "BOOT SIDE = 2" and
+# the FIT hash checks pass) still shows "ubi0: attached mtd5" in dmesg.
+#
+# So there is really only ONE rootfs UBI volume in practice: whichever
+# ubi0 auto-attach finds (mtd5). Only the KERNEL is genuinely dual-bank;
+# the rootfs is shared. mercury_do_upgrade() must therefore update THIS
+# volume on every upgrade regardless of which bank it targets for the
+# kernel - writing a new rootfs to the target bank's OWN "ubi"
+# sub-partition (mtd8 when targeting bank 2) would be silently ignored,
+# since nothing ever attaches it.
+#
+# The obvious risk: if the rootfs is shared, "switching back to the
+# previous slot" (what the failsafe does on a bad boot) reverts the
+# KERNEL but, without the backup/restore pair here, would leave the
+# OLD kernel running against the NEW (just-written) rootfs - the exact
+# same kind of kernel/rootfs mismatch this whole mechanism exists to
+# prevent, just introduced by the revert path instead of the upgrade.
+# mercury_backup_rootfs()/mercury_restore_rootfs() keep kernel and
+# rootfs moving as a matched pair in both directions.
+# ---------------------------------------------------------------------
+
+MERCURY_ROOTFS_BACKUP="rootfs_backup.bin"
+
+mercury_find_ubi_rootfs_dev() {
+	local ubi_dev vol_dev
+	for ubi_dev in /sys/class/ubi/ubi[0-9]*; do
+		[ -d "$ubi_dev" ] || continue
+		for vol_dev in "$ubi_dev"/ubi*_*; do
+			[ -d "$vol_dev" ] || continue
+			if [ "$(cat "$vol_dev/name" 2>/dev/null)" = "rootfs" ]; then
+				echo "/dev/$(basename "$vol_dev")"
+				return 0
+			fi
+		done
+	done
+	return 1
+}
+
+mercury_ubi_vol_size() {
+	# Bytes, from the "rootfs" volume's own /sys attribute - not an
+	# estimate: this is exactly how many bytes ubiupdatevol will read
+	# back out, so the backup and the live volume can never disagree
+	# on size.
+	local dev="$1"
+	cat "/sys/class/ubi/$(basename "$dev")/data_bytes" 2>/dev/null
+}
+
+mercury_backup_rootfs() {
+	# Copies the CURRENTLY RUNNING rootfs (whatever is in the shared
+	# UBI "rootfs" volume right now, known-good since it is what booted
+	# this session) into priv_data, before it gets overwritten. This is
+	# what mercury_restore_rootfs() plays back if the new kernel+rootfs
+	# pair does not come up healthy.
+	local ubi_dev size
+
+	ubi_dev=$(mercury_find_ubi_rootfs_dev)
+	if [ -z "$ubi_dev" ]; then
+		echo "Mercury: ERROR - could not find the 'rootfs' UBI volume"
+		return 1
+	fi
+
+	size=$(mercury_ubi_vol_size "$ubi_dev")
+	if [ -z "$size" ] || [ "$size" -le 0 ]; then
+		echo "Mercury: ERROR - could not read size of $ubi_dev"
+		return 1
+	fi
+
+	if ! mercury_mount_data; then
+		echo "Mercury: ERROR - priv_data unavailable, cannot back up rootfs"
+		return 1
+	fi
+
+	echo "Mercury: Backing up current rootfs ($ubi_dev, $size bytes) before upgrade..."
+	if ! dd if="$ubi_dev" of="$MERCURY_DATA_MOUNT/$MERCURY_ROOTFS_BACKUP" bs=64k 2>/dev/null; then
+		echo "Mercury: ERROR - failed to back up current rootfs"
+		mercury_umount_data
+		return 1
+	fi
+
+	local have_size
+	have_size=$(stat -c%s "$MERCURY_DATA_MOUNT/$MERCURY_ROOTFS_BACKUP" 2>/dev/null || \
+	            wc -c < "$MERCURY_DATA_MOUNT/$MERCURY_ROOTFS_BACKUP")
+	mercury_umount_data
+
+	if [ "$have_size" != "$size" ]; then
+		echo "Mercury: ERROR - rootfs backup size mismatch (wrote $have_size, wanted $size)"
+		return 1
+	fi
+	echo "Mercury: Rootfs backup complete ($have_size bytes)."
+	return 0
+}
+
+mercury_restore_rootfs() {
+	# Used by the failsafe revert path (95mercuryfailsafe) to put the
+	# OLD rootfs back so it is paired with the OLD kernel again, exactly
+	# as it was before the upgrade attempt.
+	local ubi_dev
+
+	if ! mercury_mount_data; then
+		echo "Mercury: WARNING - priv_data unavailable, cannot restore rootfs backup"
+		return 1
+	fi
+
+	if [ ! -f "$MERCURY_DATA_MOUNT/$MERCURY_ROOTFS_BACKUP" ]; then
+		echo "Mercury: no rootfs backup present, nothing to restore"
+		mercury_umount_data
+		return 0
+	fi
+
+	ubi_dev=$(mercury_find_ubi_rootfs_dev)
+	if [ -z "$ubi_dev" ]; then
+		echo "Mercury: ERROR - could not find the 'rootfs' UBI volume to restore onto"
+		mercury_umount_data
+		return 1
+	fi
+
+	local size
+	size=$(stat -c%s "$MERCURY_DATA_MOUNT/$MERCURY_ROOTFS_BACKUP" 2>/dev/null || \
+	       wc -c < "$MERCURY_DATA_MOUNT/$MERCURY_ROOTFS_BACKUP")
+	echo "Mercury-Failsafe: restoring pre-upgrade rootfs onto $ubi_dev ($size bytes)..."
+	if ! ubiupdatevol "$ubi_dev" "$MERCURY_DATA_MOUNT/$MERCURY_ROOTFS_BACKUP"; then
+		echo "Mercury: ERROR - ubiupdatevol failed while restoring rootfs backup"
+		mercury_umount_data
+		return 1
+	fi
+
+	rm -f "$MERCURY_DATA_MOUNT/$MERCURY_ROOTFS_BACKUP"
+	sync
+	mercury_umount_data
+	echo "Mercury-Failsafe: rootfs restored."
+	return 0
 }
 
 mercury_save_config() {
@@ -267,57 +417,138 @@ mercury_do_upgrade() {
 		echo "Mercury: Preserve configuration disabled (clean install)"
 	fi
 
-	local fw_image="$image_file"
-	local kernel_path
-	if tar -tf "$image_file" >/dev/null 2>&1; then
-		echo "Mercury: Detected sysupgrade tar format, extracting..."
-		fw_image="/tmp/firmware.bin"
-		kernel_path="$(tar -tf "$image_file" | grep '/kernel$' | sed -n '1p')"
-		if [ -z "$kernel_path" ]; then
-			echo "Mercury: ERROR - No kernel found in sysupgrade tar"
-			return 1
-		fi
-		tar -xOf "$image_file" "$kernel_path" > "$fw_image" 2>/dev/null
-		if [ ! -s "$fw_image" ]; then
-			echo "Mercury: ERROR - Failed to extract firmware from sysupgrade tar"
-			rm -f "$fw_image"
-			return 1
-		fi
-		echo "Mercury: Extracted firmware from: $kernel_path"
-	fi
-
-	local fw_size=$(stat -c%s "$fw_image" 2>/dev/null || wc -c < "$fw_image")
-	echo "Mercury: Firmware image size: $fw_size bytes"
-	if [ "$fw_size" -lt 1000000 ]; then
-		echo "Mercury: ERROR - Firmware image too small (corrupt?)"
-		[ "$fw_image" != "$image_file" ] && rm -f "$fw_image"
+	# ------------------------------------------------------------
+	# Back up the CURRENT (known-good, currently booted) rootfs before
+	# touching anything. Only the kernel is truly per-bank on this
+	# device - see the comment above mercury_find_ubi_rootfs_dev(). If
+	# we cannot take this backup, refuse to proceed: writing a new
+	# rootfs with no way back would turn "new kernel/rootfs pair fails
+	# to come up" from a 5-minute failsafe revert into a device that
+	# needs the UART console we cannot always assume is connected.
+	# ------------------------------------------------------------
+	if ! mercury_backup_rootfs; then
+		echo "Mercury: ERROR - could not back up the current rootfs, aborting upgrade."
+		echo "Mercury: Nothing has been written yet - the device is unchanged."
 		return 1
 	fi
 
-	echo "Mercury: Erasing target partition $target_mtd..."
+	local fw_image="/tmp/firmware.bin"
+	local root_image="/tmp/rootfs.bin"
+	local kernel_path root_path
+	if ! tar -tf "$image_file" >/dev/null 2>&1; then
+		echo "Mercury: ERROR - image is not a sysupgrade tar (got a bare kernel-only"
+		echo "         image?). This device needs the kernel AND rootfs together -"
+		echo "         see the comment above mercury_find_ubi_rootfs_dev() for why."
+		return 1
+	fi
+
+	echo "Mercury: Detected sysupgrade tar format, extracting kernel + root..."
+	kernel_path="$(tar -tf "$image_file" | grep '/kernel$' | sed -n '1p')"
+	root_path="$(tar -tf "$image_file" | grep '/root$' | sed -n '1p')"
+	if [ -z "$kernel_path" ]; then
+		echo "Mercury: ERROR - No kernel found in sysupgrade tar"
+		return 1
+	fi
+	if [ -z "$root_path" ]; then
+		echo "Mercury: ERROR - No root (rootfs) found in sysupgrade tar."
+		echo "         Refusing to flash a kernel with no matching rootfs -"
+		echo "         that combination does not boot on this device."
+		return 1
+	fi
+
+	tar -xOf "$image_file" "$kernel_path" > "$fw_image" 2>/dev/null
+	if [ ! -s "$fw_image" ]; then
+		echo "Mercury: ERROR - Failed to extract kernel from sysupgrade tar"
+		rm -f "$fw_image"
+		return 1
+	fi
+	echo "Mercury: Extracted kernel from: $kernel_path"
+
+	tar -xOf "$image_file" "$root_path" > "$root_image" 2>/dev/null
+	if [ ! -s "$root_image" ]; then
+		echo "Mercury: ERROR - Failed to extract root from sysupgrade tar"
+		rm -f "$fw_image" "$root_image"
+		return 1
+	fi
+	echo "Mercury: Extracted root from: $root_path"
+
+	local fw_size root_size
+	fw_size=$(stat -c%s "$fw_image" 2>/dev/null || wc -c < "$fw_image")
+	root_size=$(stat -c%s "$root_image" 2>/dev/null || wc -c < "$root_image")
+	echo "Mercury: kernel image size: $fw_size bytes, root image size: $root_size bytes"
+	if [ "$fw_size" -lt 1000000 ]; then
+		echo "Mercury: ERROR - kernel image too small (corrupt?)"
+		rm -f "$fw_image" "$root_image"
+		return 1
+	fi
+	if [ "$root_size" -lt 1000000 ]; then
+		echo "Mercury: ERROR - root image too small (corrupt?)"
+		rm -f "$fw_image" "$root_image"
+		return 1
+	fi
+
+	local rootfs_ubi_dev rootfs_ubi_size
+	rootfs_ubi_dev=$(mercury_find_ubi_rootfs_dev)
+	if [ -z "$rootfs_ubi_dev" ]; then
+		echo "Mercury: ERROR - could not find the 'rootfs' UBI volume to write to"
+		rm -f "$fw_image" "$root_image"
+		return 1
+	fi
+	rootfs_ubi_size=$(mercury_ubi_vol_size "$rootfs_ubi_dev")
+	if [ -n "$rootfs_ubi_size" ] && [ "$root_size" -gt "$rootfs_ubi_size" ]; then
+		echo "Mercury: ERROR - new root ($root_size bytes) is bigger than the"
+		echo "         rootfs UBI volume ($rootfs_ubi_size bytes). Refusing to write"
+		echo "         a rootfs that cannot possibly fit."
+		rm -f "$fw_image" "$root_image"
+		return 1
+	fi
+
+	echo "Mercury: Erasing target kernel partition $target_mtd..."
 	if ! flash_erase "$target_mtd" 0 0; then
 		echo "Mercury: ERROR - Failed to erase target partition"
-		[ "$fw_image" != "$image_file" ] && rm -f "$fw_image"
+		rm -f "$fw_image" "$root_image"
 		return 1
 	fi
 
-	echo "Mercury: Writing firmware to $target_mtd..."
+	echo "Mercury: Writing kernel to $target_mtd..."
 	if ! nandwrite -p "$target_mtd" "$fw_image"; then
-		echo "Mercury: ERROR - Failed to write firmware"
-		[ "$fw_image" != "$image_file" ] && rm -f "$fw_image"
+		echo "Mercury: ERROR - Failed to write kernel"
+		echo "Mercury: Boot slot NOT switched - device will still boot the old,"
+		echo "         untouched slot $current_slot on next boot."
+		rm -f "$fw_image" "$root_image"
 		return 1
 	fi
-	echo "Mercury: Firmware write completed"
+	echo "Mercury: Kernel write completed"
+	rm -f "$fw_image"
 
-	[ "$fw_image" != "$image_file" ] && rm -f "$fw_image"
+	# The rootfs volume is shared across both banks (see comment above
+	# mercury_find_ubi_rootfs_dev), so this write affects the system
+	# regardless of which bank ends up selected. That is exactly why
+	# the backup above exists: if this pair does not come up healthy,
+	# 95mercuryfailsafe restores this same backup alongside reverting
+	# the boot slot, so old-kernel-with-new-rootfs can never happen.
+	echo "Mercury: Writing new rootfs to $rootfs_ubi_dev via ubiupdatevol..."
+	if ! ubiupdatevol "$rootfs_ubi_dev" "$root_image"; then
+		echo "Mercury: ERROR - Failed to write rootfs"
+		echo "Mercury: Boot slot NOT switched. Restoring original rootfs from backup..."
+		mercury_restore_rootfs
+		rm -f "$root_image"
+		return 1
+	fi
+	echo "Mercury: Rootfs write completed"
+	rm -f "$root_image"
 
 	if ! mercury_switch_boot_slot "$config_mtd" "$target_slot"; then
 		echo "Mercury: ERROR - Failed to switch boot slot"
-		echo "Mercury: WARNING - Firmware written but boot slot not switched!"
+		echo "Mercury: WARNING - Kernel+rootfs written but boot slot not switched!"
+		echo "Mercury: Restoring original rootfs from backup to avoid a mismatch..."
+		mercury_restore_rootfs
 		return 1
 	fi
 
-	echo "Mercury: Arming boot failsafe (revert to slot $current_slot if slot $target_slot does not come up healthy)..."
+	echo "Mercury: Arming boot failsafe (revert kernel slot to $current_slot AND"
+	echo "         restore the pre-upgrade rootfs if slot $target_slot does not"
+	echo "         come up healthy)..."
 	if mercury_mount_data; then
 		echo "prev_slot=$current_slot" > "$MERCURY_DATA_MOUNT/pending_boot"
 		echo "new_slot=$target_slot" >> "$MERCURY_DATA_MOUNT/pending_boot"

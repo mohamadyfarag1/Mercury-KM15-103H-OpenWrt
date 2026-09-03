@@ -211,6 +211,54 @@ else
     echo "  OK: custom regulatory.db ($REGDB_SZ bytes)"
 fi
 
+# ---------------------------------------------------------------
+# Step 9.5: Verify the UBI tools mercury.sh now depends on are in the
+# rootfs, and that the sysupgrade tar actually carries BOTH "kernel"
+# and "root" members.
+#
+# mercury_do_upgrade() writes the rootfs via `ubiupdatevol` because
+# this device's two "firmware" banks share a single UBI rootfs volume
+# regardless of which bank's kernel booted (verified on real hardware,
+# 2026-09-03: booting bank 2's kernel still shows "ubi0: attached
+# mtd5", bank 1's ubi). Without ubiattach/ubiupdatevol/ubinfo present,
+# RAMFS_COPY_BIN cannot stage them into the upgrade ramdisk and every
+# upgrade attempt fails at the "Writing new rootfs" step - discovered
+# the hard way on the very first real-device test of this build, where
+# the earlier kernel-only upgrade left the device running a new kernel
+# against the old vendor rootfs. Catch a missing package here instead.
+# ---------------------------------------------------------------
+echo "======================================="
+echo "Step 9.5: Verifying UBI tools + sysupgrade tar structure..."
+echo "======================================="
+ROOTDIR=$(find build_dir -type d -path '*/root-ramips*' 2>/dev/null | head -n1)
+if [ -z "$ROOTDIR" ]; then
+    echo "!!!! could not find the root-ramips staging directory under build_dir."
+    find build_dir -maxdepth 3 -type d -name 'root-*' 2>/dev/null
+    exit 1
+fi
+echo "rootfs staging dir: $ROOTDIR"
+for TOOL in ubiattach ubidetach ubiupdatevol ubiformat ubimkvol ubinfo nandwrite flash_erase; do
+    if find "$ROOTDIR" -type f -name "$TOOL" 2>/dev/null | grep -q .; then
+        echo "  OK: $TOOL present in rootfs"
+    else
+        echo "!!!! $TOOL missing from rootfs - mercury_do_upgrade() cannot run."
+        echo "     mtd-utils should provide this; check DEVICE_PACKAGES / feeds."
+        exit 1
+    fi
+done
+
+TAR_IMAGE=$(find "$BIN_DIR" -type f -name "*mercury_km15-103h*sysupgrade.bin" | head -n1)
+KERNEL_MEMBER=$(tar -tf "$TAR_IMAGE" 2>/dev/null | grep '/kernel$')
+ROOT_MEMBER=$(tar -tf "$TAR_IMAGE" 2>/dev/null | grep '/root$')
+if [ -z "$KERNEL_MEMBER" ] || [ -z "$ROOT_MEMBER" ]; then
+    echo "!!!! sysupgrade tar is missing 'kernel' and/or 'root':"
+    tar -tf "$TAR_IMAGE" 2>/dev/null
+    echo "     mercury_do_upgrade() requires both - see the comment above"
+    echo "     mercury_find_ubi_rootfs_dev() in lib/upgrade/mercury.sh for why."
+    exit 1
+fi
+echo "  OK: sysupgrade tar has both '$KERNEL_MEMBER' and '$ROOT_MEMBER'"
+
 echo "======================================="
 echo "✅ BUILD SUCCESSFUL"
 echo "image : $(basename "$IMAGE_FILE")  ($FILESIZE bytes)"

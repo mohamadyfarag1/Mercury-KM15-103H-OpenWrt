@@ -79,6 +79,18 @@ mercury_failsafe_run() {
 		return 1
 	fi
 
+	# The rootfs UBI volume is SHARED across both banks - only the
+	# kernel is genuinely per-slot (see the comment above
+	# mercury_find_ubi_rootfs_dev() in lib/upgrade/mercury.sh). Reverting
+	# just the boot-slot byte would point back at the OLD kernel while
+	# leaving the NEW rootfs in place - old kernel against new rootfs is
+	# exactly the mismatch this whole mechanism exists to prevent, just
+	# introduced by the revert instead of the upgrade. Restore the
+	# pre-upgrade rootfs backup first so kernel and rootfs land back on
+	# the same known-good pairing together.
+	echo "Mercury-Failsafe: restoring pre-upgrade rootfs to match slot $prev_slot's kernel..."
+	mercury_restore_rootfs
+
 	mercury_switch_boot_slot "/dev/mtd${config_mtd_num}" "$prev_slot"
 	mercury_clear_pending
 	sync
