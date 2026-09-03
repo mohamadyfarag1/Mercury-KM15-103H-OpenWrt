@@ -237,12 +237,12 @@ if [ -z "$ROOTDIR" ]; then
     exit 1
 fi
 echo "rootfs staging dir: $ROOTDIR"
-for TOOL in ubiattach ubidetach ubiupdatevol ubiformat ubimkvol ubinfo nandwrite flash_erase; do
+for TOOL in ubiattach ubidetach ubiupdatevol ubiformat ubimkvol ubinfo; do
     if find "$ROOTDIR" -type f -name "$TOOL" 2>/dev/null | grep -q .; then
         echo "  OK: $TOOL present in rootfs"
     else
         echo "!!!! $TOOL missing from rootfs - mercury_do_upgrade() cannot run."
-        echo "     mtd-utils should provide this; check DEVICE_PACKAGES / feeds."
+        echo "     ubi-utils package should provide this; check DEVICE_PACKAGES / feeds."
         exit 1
     fi
 done

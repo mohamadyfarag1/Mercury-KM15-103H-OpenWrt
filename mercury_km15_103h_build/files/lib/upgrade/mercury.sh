@@ -11,7 +11,7 @@
 # ubiupdatevol. All of these are separate mtd-utils binaries, not
 # busybox applets, so they must be listed here explicitly or they are
 # simply absent from the ramdisk stage2 runs in.
-RAMFS_COPY_BIN='nandwrite flash_erase hexdump ubiattach ubidetach ubiupdatevol ubiformat ubimkvol ubinfo'
+RAMFS_COPY_BIN='hexdump ubiattach ubidetach ubiupdatevol ubiformat ubimkvol ubinfo'
 
 MERCURY_DATA_PART="Userdata"
 MERCURY_DATA_VOLUME="priv_data"
@@ -329,7 +329,7 @@ mercury_switch_boot_slot() {
 	echo "Mercury: RAM verification passed at 0x2000A (slot=$verify_byte)"
 
 	echo "Mercury: Erasing Config partition..."
-	if ! flash_erase "$config_mtd" 0 0 2>/dev/null; then
+	if ! mtd erase "$config_mtd" 2>/dev/null; then
 		echo "Mercury: ERROR - Failed to erase Config partition"
 		rm -f "$backup_file" "$modified_file"
 		return 1
@@ -339,7 +339,7 @@ mercury_switch_boot_slot() {
 	if ! dd if="$modified_file" of="$config_mtd" bs=64k 2>/dev/null; then
 		echo "Mercury: ERROR - Failed to write Config partition"
 		echo "Mercury: CRITICAL - Attempting recovery from backup..."
-		flash_erase "$config_mtd" 0 0 2>/dev/null
+		mtd erase "$config_mtd" 2>/dev/null
 		dd if="$backup_file" of="$config_mtd" bs=64k 2>/dev/null
 		rm -f "$backup_file" "$modified_file"
 		return 1
@@ -360,7 +360,7 @@ mercury_switch_boot_slot() {
 	if [ "$verify_byte" != "$target_slot" ]; then
 		echo "Mercury: ERROR - Flash verification failed at 0x2000A (expected $target_slot, got $verify_byte)"
 		echo "Mercury: CRITICAL - Attempting recovery from backup..."
-		flash_erase "$config_mtd" 0 0 2>/dev/null
+		mtd erase "$config_mtd" 2>/dev/null
 		dd if="$backup_file" of="$config_mtd" bs=64k 2>/dev/null
 		rm -f "$backup_file" "$modified_file"
 		return 1
@@ -503,15 +503,8 @@ mercury_do_upgrade() {
 		return 1
 	fi
 
-	echo "Mercury: Erasing target kernel partition $target_mtd..."
-	if ! flash_erase "$target_mtd" 0 0; then
-		echo "Mercury: ERROR - Failed to erase target partition"
-		rm -f "$fw_image" "$root_image"
-		return 1
-	fi
-
-	echo "Mercury: Writing kernel to $target_mtd..."
-	if ! nandwrite -p "$target_mtd" "$fw_image"; then
+	echo "Mercury: Writing kernel to $target_part (erasing first via mtd)..."
+	if ! mtd write "$fw_image" "$target_part"; then
 		echo "Mercury: ERROR - Failed to write kernel"
 		echo "Mercury: Boot slot NOT switched - device will still boot the old,"
 		echo "         untouched slot $current_slot on next boot."
