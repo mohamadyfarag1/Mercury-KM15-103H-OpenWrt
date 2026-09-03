@@ -15,7 +15,7 @@ cat << 'EOF' > .config
 # Target System
 CONFIG_TARGET_ramips=y
 CONFIG_TARGET_ramips_mt7621=y
-CONFIG_TARGET_DEVICE_ramips_mt7621_DEVICE_mercury_km15-103h=y
+CONFIG_TARGET_ramips_mt7621_DEVICE_mercury_km15-103h=y
 
 # Wireless Drivers & Firmware
 CONFIG_PACKAGE_kmod-mt7915e=y
@@ -56,8 +56,8 @@ echo "Running make defconfig..."
 make defconfig
 
 echo "Verifying mercury_km15-103h device symbol was actually enabled..."
-if ! grep -q '^CONFIG_TARGET_DEVICE_ramips_mt7621_DEVICE_mercury_km15-103h=y' .config; then
-	echo "❌ ERROR: CONFIG_TARGET_DEVICE_ramips_mt7621_DEVICE_mercury_km15-103h=y is NOT set in .config after defconfig!"
+if ! grep -q '^CONFIG_TARGET_ramips_mt7621_DEVICE_mercury_km15-103h=y' .config; then
+	echo "❌ ERROR: CONFIG_TARGET_ramips_mt7621_DEVICE_mercury_km15-103h=y is NOT set in .config after defconfig!"
 	echo "This means the device symbol was dropped/rejected by Kconfig - compiling now would silently build"
 	echo "the wrong (default) device instead, as happened before. Aborting early instead of wasting a full build."
 	echo ""
@@ -74,7 +74,7 @@ if ! grep -q '^CONFIG_TARGET_DEVICE_ramips_mt7621_DEVICE_mercury_km15-103h=y' .c
 	grep -n 'define Device/dsa-migration' target/linux/ramips/image/mt7621.mk || echo "(NOT FOUND - macro may have been renamed/removed upstream)"
 	echo ""
 	echo "--- First 30 ramips/mt7621 device symbols known to Kconfig (for comparison) ---"
-	grep 'CONFIG_TARGET_DEVICE_ramips_mt7621_DEVICE_' .config | head -30
+	grep 'CONFIG_TARGET_ramips_mt7621_DEVICE_' .config | head -30
 	exit 1
 fi
 echo "✅ Device symbol confirmed enabled."
