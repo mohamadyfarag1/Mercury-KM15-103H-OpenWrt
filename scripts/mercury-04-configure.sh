@@ -40,6 +40,10 @@ CONFIG_PACKAGE_rpcd=y
 CONFIG_PACKAGE_rpcd-mod-luci=y
 
 # System Tools & Utilities
+# irqbalance spreads the mt76 (PCIe WiFi) and GMAC (ethernet) IRQs across
+# all 4 MT7621 hardware threads instead of pinning them to CPU0, which is
+# the single biggest "use all cores" win for AP + routing throughput.
+CONFIG_PACKAGE_irqbalance=y
 CONFIG_PACKAGE_uboot-envtools=y
 CONFIG_PACKAGE_htop=y
 CONFIG_PACKAGE_nano=y

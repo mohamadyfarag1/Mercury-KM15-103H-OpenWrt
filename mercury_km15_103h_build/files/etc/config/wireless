@@ -7,6 +7,10 @@ config wifi-device 'radio0'
 	option country 'US'
 	option cell_density '0'
 	option txpower '30'
+	# noscan: skip the OBSS (overlapping-BSS) scan so the AP does not
+	# self-downgrade its width when neighbours are present. Required to
+	# keep the widest channel; harmless on 2.4G HE40.
+	option noscan '1'
 	option disabled '0'
 
 config wifi-iface 'default_radio0'
@@ -25,6 +29,11 @@ config wifi-device 'radio1'
 	option country 'US'
 	option cell_density '0'
 	option txpower '30'
+	# CRITICAL for 160 MHz: without noscan, hostapd runs an OBSS scan on
+	# startup and drops 160->80->40 MHz the moment it detects any other
+	# network on overlapping channels. With our no-DFS custom regdb the
+	# 36-64 (5170-5330) block is fully usable, so lock the full width.
+	option noscan '1'
 	option disabled '0'
 
 config wifi-iface 'default_radio1'
