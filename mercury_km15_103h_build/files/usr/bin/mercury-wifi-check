@@ -109,14 +109,18 @@ for PHYPATH in /sys/class/ieee80211/*; do
             while read -r l; do say "            $l"; done
     fi
 
-    # 5 GHz sanity: the mt76_channels_5ghz[] table has 28 channels
-    # (36-177) and the custom regdb unlocks all of them. If the count
-    # is much lower, the regdb was not injected or the driver has an
-    # older channel table.
+    # 5 GHz sanity: the patched mt76_channels_5ghz[] has 68 channels
+    # at 10 MHz spacing (5180-5885 MHz). If the count is far below
+    # that, either the 999-mercury-superchannels.patch did not apply
+    # or the custom regdb was not injected - both leave the radio
+    # offering channels the driver never registered.
     IS5G=$(echo "$INFO" | grep -c "51[0-9][0-9]\|52[0-9][0-9]\|58[0-9][0-9]")
-    if [ "$IS5G" -gt 0 ] && [ "$CHANS" -lt 25 ]; then
-        problem "$PHY shows only $CHANS 5 GHz channels (expected >= 28)."
-        say "            The custom regdb may not be in the image."
+    if [ "$IS5G" -gt 0 ] && [ "$CHANS" -lt 60 ]; then
+        problem "$PHY shows only $CHANS 5 GHz channels (expected 68)."
+        say "            The superchannel patch (999-mercury-superchannels.patch)"
+        say "            or the custom regulatory.db did not make it into the image."
+        say "            Selecting an extended channel will cause the radio to go"
+        say "            silent (hostapd: 'Could not determine operating frequency')."
     fi
 
     # Check 160 MHz capability
