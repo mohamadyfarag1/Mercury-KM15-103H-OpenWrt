@@ -439,7 +439,7 @@ fi
 # Kernel partition vs the kernel actually packed for it. This is the check
 # that would have caught "Bad FIT kernel image format": a FIT larger than
 # its partition is overwritten by UBI's headers on first boot.
-KPART_HEX=$(awk '/label = "kernel"/{f=1} f && /reg = </{gsub(/.*reg = <|>.*/,""); print $2; exit}' "$DTB_DTS")
+KPART_HEX=$(awk '/label = "firmware"/{f=1} f && /reg = </{gsub(/.*reg = <|>.*/,""); print $2; exit}' "$DTB_DTS")
 if [ -z "$KPART_HEX" ]; then
     echo "!!!! could not read the kernel partition size out of the DTB."
     exit 1
