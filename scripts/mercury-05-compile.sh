@@ -376,6 +376,90 @@ case "$KMAGIC" in
 esac
 
 echo "======================================="
+echo "Step 9.6: Verifying the PRODUCED artifacts, not just the sources..."
+echo "======================================="
+# Every serious defect this board has hit was of one shape: the output
+# silently did not match the input. mercury-01 decompiled the factory
+# device_tree.dtb over our .dts for many builds, so none of the DTS work
+# was ever compiled in - and nothing noticed, because the build only ever
+# checked its own inputs. A 4 MB kernel partition overflowed into UBI the
+# same way. So verify the compiled DTB and the packed kernel themselves.
+
+DTB=$(find build_dir -type f -name '*mercury_km15-103h*.dtb' 2>/dev/null | head -n1)
+if [ -z "$DTB" ]; then
+    echo "!!!! no compiled *mercury_km15-103h*.dtb found under build_dir."
+    exit 1
+fi
+echo "compiled DTB: $DTB"
+
+DTC=$(command -v staging_dir/host/bin/dtc || command -v dtc || echo staging_dir/host/bin/dtc)
+DTB_DTS=$(mktemp)
+if ! "$DTC" -I dtb -O dts -o "$DTB_DTS" "$DTB" 2>/dev/null; then
+    echo "!!!! could not decompile $DTB with '$DTC'."
+    exit 1
+fi
+
+# The MAC cell. Nothing else in the image can compensate if this is wrong:
+# with no hardcoded fallback left, a bad offset means every unit ships
+# with a random MAC.
+if grep -q '0x40004 0x6' "$DTB_DTS"; then
+    echo "  OK       : mac-base nvmem cell at 0x40004 (absolute 0xC0004)"
+else
+    echo "!!!! the compiled DTB has no mac-base cell at 0x40004."
+    echo "     HARDWARE_MAP.md records the factory base MAC at offset 0x4 of"
+    echo "     the vendor Config partition (0xC0000); our Config starts at"
+    echo "     0x80000, so the cell must read 0x40004."
+    grep -n 'macaddr\|mac-base' "$DTB_DTS" | head -20
+    exit 1
+fi
+
+# A hardcoded MAC would put one identical address on every deployed unit.
+if grep -qE 'mac-address = \[' "$DTB_DTS"; then
+    echo "!!!! the compiled DTB still carries a hardcoded mac-address:"
+    grep -nE 'mac-address = \[' "$DTB_DTS"
+    echo "     Every unit flashed with this image would share that address."
+    exit 1
+fi
+echo "  OK       : no hardcoded mac-address - each unit reads its own NAND"
+
+# Block 6 (0xC0000) holds that MAC and is a factory bad block; only the
+# remapping layer makes it readable, and this property is what turns it on.
+if grep -q 'mediatek,nmbm' "$DTB_DTS"; then
+    echo "  OK       : mediatek,nmbm present (bad-block remapping enabled)"
+else
+    echo "!!!! the compiled DTB lacks mediatek,nmbm - block 6 holding the"
+    echo "     factory MAC would be read raw and fail with an ECC error."
+    exit 1
+fi
+
+# Kernel partition vs the kernel actually packed for it. This is the check
+# that would have caught "Bad FIT kernel image format": a FIT larger than
+# its partition is overwritten by UBI's headers on first boot.
+KPART_HEX=$(awk '/label = "kernel"/{f=1} f && /reg = </{gsub(/.*reg = <|>.*/,""); print $2; exit}' "$DTB_DTS")
+if [ -z "$KPART_HEX" ]; then
+    echo "!!!! could not read the kernel partition size out of the DTB."
+    exit 1
+fi
+KPART=$((KPART_HEX))
+KSIZE=$(tar -xOf "$TAR_IMAGE" "$KERNEL_MEMBER" 2>/dev/null | wc -c)
+echo "  kernel image : $KSIZE bytes"
+echo "  kernel part  : $KPART bytes ($KPART_HEX)"
+if [ "$KSIZE" -ge "$KPART" ]; then
+    echo "!!!! the FIT kernel does not fit its partition."
+    echo "     UBI starts immediately after it and would write its volume"
+    echo "     headers over the kernel tail, so the device flashes cleanly"
+    echo "     and then fails to boot. Enlarge the kernel partition (and"
+    echo "     shrink ubi by the same amount) in mercury_km15_103h.dts."
+    rm -f "$DTB_DTS"
+    exit 1
+fi
+echo "  OK       : kernel fits with $((KPART - KSIZE)) bytes ($(( (KPART - KSIZE) * 100 / KPART ))%) headroom"
+if [ $(( (KPART - KSIZE) * 100 / KPART )) -lt 10 ]; then
+    echo "  WARNING  : under 10% headroom - the next kernel bump may overflow."
+fi
+rm -f "$DTB_DTS"
+
+echo "======================================="
 echo "✅ BUILD SUCCESSFUL"
 echo "image : $(basename "$IMAGE_FILE")  ($FILESIZE bytes)"
 echo "md5   : $(md5sum "$IMAGE_FILE" | awk '{print $1}')"
