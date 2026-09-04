@@ -420,13 +420,24 @@ mercury_do_upgrade() {
 	# ------------------------------------------------------------
 	# Back up the CURRENT (known-good, currently booted) rootfs before
 	# touching anything. Only the kernel is truly per-bank on this
-	# device - see the comment above mercury_find_ubi_rootfs_dev(). If
-	# we cannot take this backup, refuse to proceed: writing a new
-	# rootfs with no way back would turn "new kernel/rootfs pair fails
-	# to come up" from a 5-minute failsafe revert into a device that
-	# needs the UART console we cannot always assume is connected.
+	# device - see the comment above mercury_find_ubi_rootfs_dev(). On
+	# a SUBSEQUENT upgrade the backup is mandatory: without it, a bad
+	# new boot would leave the old kernel running against the new rootfs
+	# (a mismatch the failsafe cannot fix without the backup).
+	#
+	# FIRST INSTALL exception: if no "rootfs" UBI volume exists yet
+	# (the "ubi" sub-partition has never been formatted), there is
+	# nothing to back up. We detect this by probing for the volume
+	# before attempting the backup, and proceed without one. The
+	# failsafe arm at the end of this function records this fact via
+	# the absence of a rootfs_backup.bin in priv_data, so
+	# mercury_restore_rootfs() will safely no-op if it is called.
 	# ------------------------------------------------------------
-	if ! mercury_backup_rootfs; then
+	local first_install=0
+	if [ -z "$(mercury_find_ubi_rootfs_dev)" ]; then
+		echo "Mercury: No rootfs UBI volume found - first install (skipping backup)."
+		first_install=1
+	elif ! mercury_backup_rootfs; then
 		echo "Mercury: ERROR - could not back up the current rootfs, aborting upgrade."
 		echo "Mercury: Nothing has been written yet - the device is unchanged."
 		return 1
@@ -490,9 +501,63 @@ mercury_do_upgrade() {
 	local rootfs_ubi_dev rootfs_ubi_size
 	rootfs_ubi_dev=$(mercury_find_ubi_rootfs_dev)
 	if [ -z "$rootfs_ubi_dev" ]; then
-		echo "Mercury: ERROR - could not find the 'rootfs' UBI volume to write to"
-		rm -f "$fw_image" "$root_image"
-		return 1
+		if [ "$first_install" = "1" ]; then
+			# First install: the "ubi" sub-partition has never been
+			# formatted. Format it, attach it, create the "rootfs"
+			# static volume at maximum size, then re-probe.
+			local ubi_mtd_num
+			ubi_mtd_num=$(mercury_get_mtd_num "ubi")
+			if [ -z "$ubi_mtd_num" ]; then
+				echo "Mercury: ERROR - Cannot find 'ubi' partition for rootfs initialization"
+				rm -f "$fw_image" "$root_image"
+				return 1
+			fi
+			ubidetach -m "$ubi_mtd_num" 2>/dev/null
+			echo "Mercury: First install - formatting UBI on mtd${ubi_mtd_num}..."
+			if ! ubiformat -y "/dev/mtd${ubi_mtd_num}"; then
+				echo "Mercury: ERROR - ubiformat failed on mtd${ubi_mtd_num}"
+				rm -f "$fw_image" "$root_image"
+				return 1
+			fi
+			echo "Mercury: Attaching UBI on mtd${ubi_mtd_num}..."
+			if ! ubiattach -m "$ubi_mtd_num"; then
+				echo "Mercury: ERROR - ubiattach failed after format"
+				rm -f "$fw_image" "$root_image"
+				return 1
+			fi
+			local new_ubi_num="" ubi_sysfs
+			for ubi_sysfs in /sys/class/ubi/ubi[0-9]*; do
+				[ -d "$ubi_sysfs" ] || continue
+				local m
+				m="$(cat "$ubi_sysfs/mtd_num" 2>/dev/null)"
+				if [ "$m" = "$ubi_mtd_num" ]; then
+					new_ubi_num="$(basename "$ubi_sysfs")"
+					new_ubi_num="${new_ubi_num#ubi}"
+					break
+				fi
+			done
+			if [ -z "$new_ubi_num" ]; then
+				echo "Mercury: ERROR - Cannot find newly attached UBI device"
+				rm -f "$fw_image" "$root_image"
+				return 1
+			fi
+			# Size the rootfs volume to exactly the squashfs size so
+			# that the remaining UBI space can be claimed later by the
+			# rootfs_data overlay volume (created on first boot by
+			# OpenWrt's init). Using -m would leave no room for it.
+			echo "Mercury: Creating rootfs volume on ubi${new_ubi_num} (size=${root_size})..."
+			if ! ubimkvol "/dev/ubi${new_ubi_num}" -N rootfs -s "$root_size"; then
+				echo "Mercury: ERROR - ubimkvol failed on ubi${new_ubi_num}"
+				rm -f "$fw_image" "$root_image"
+				return 1
+			fi
+			rootfs_ubi_dev=$(mercury_find_ubi_rootfs_dev)
+		fi
+		if [ -z "$rootfs_ubi_dev" ]; then
+			echo "Mercury: ERROR - could not find the 'rootfs' UBI volume to write to"
+			rm -f "$fw_image" "$root_image"
+			return 1
+		fi
 	fi
 	rootfs_ubi_size=$(mercury_ubi_vol_size "$rootfs_ubi_dev")
 	if [ -n "$rootfs_ubi_size" ] && [ "$root_size" -gt "$rootfs_ubi_size" ]; then
