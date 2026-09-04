@@ -292,13 +292,13 @@ mercury_switch_boot_slot() {
 	local modified_file="/tmp/config_modified.bin"
 	local verify_byte mac_hex
 
-	# Erasing Config is the single most dangerous thing this script does:
-	# the partition spans 0x80000-0x100000, which contains the factory MAC
-	# at offset 0x40004 (absolute 0xC0004).  That address lives in block 6,
-	# a factory bad block that NMBM transparently remaps.  A read-modify-
-	# erase-write cycle over it can permanently destroy the MAC.  So do not
-	# erase at all unless the slot byte is genuinely wrong - in single-bank
-	# mode the target is always 1, so after the first write this is a no-op.
+	# Erasing Config is the single most dangerous thing this script does.
+	# Config spans NAND 0x100000-0x180000.  The partition is encrypted by the
+	# factory bootloader; neither the slot byte nor the MAC at offset 0x40004
+	# (absolute 0x140004) are readable as plain-text by Linux.  The MAC check
+	# below will always fail (encrypted bytes != valid OUI), so this function
+	# will always return 1 without touching the flash - which is safe.
+	# U-Boot decrypts Config and handles boot-slot selection itself.
 	if [ "$(dd if="$config_mtd" bs=1 skip=10 count=1 2>/dev/null | hexdump -e '"%d"')" = "$target_slot" ] &&
 	   [ "$(dd if="$config_mtd" bs=1 skip=131082 count=1 2>/dev/null | hexdump -e '"%d"')" = "$target_slot" ]; then
 		echo "Mercury: Boot slot already $target_slot - leaving Config untouched."

@@ -72,8 +72,6 @@
     mac@0 {
       compatible = "mediatek,eth-mac";
       name = "mac";
-      nvmem-cell-names = "mac-address";
-      nvmem-cells = <0x13 0x1>;
       phandle = <0x19>;
       phy-mode = "rgmii";
       reg = <0x0>;
@@ -161,8 +159,6 @@
           port@0 {
             label = "wan";
             name = "port";
-            nvmem-cell-names = "mac-address";
-            nvmem-cells = <0x13 0x0>;
             phy-handle = <0x14>;
             reg = <0x0>;
             status = "okay";
@@ -358,11 +354,11 @@
         read-only;
         reg = <0x0 0x80000>;
       };
-      partition@100000 {
+      partition@80000 {
         label = "Factory";
         name = "partition";
         read-only;
-        reg = <0x100000 0x80000>;
+        reg = <0x80000 0x80000>;
         nvmem-layout {
           #address-cells = <0x1>;
           #size-cells = <0x1>;
@@ -380,10 +376,10 @@
           };
         };
       };
-      partition@80000 {
+      partition@100000 {
         label = "Config";
         name = "partition";
-        reg = <0x80000 0x80000>;
+        reg = <0x100000 0x80000>;
         nvmem-layout {
           #address-cells = <0x1>;
           #size-cells = <0x1>;
@@ -634,19 +630,13 @@
         compatible = "mediatek,mt76";
         mediatek,disable-radar-background;
         name = "wifi";
-        nvmem-cell-names = "eeprom", "precal";
-        nvmem-cells = <0x1d 0x1e>;
         reg = <0x0 0x0 0x0 0x0 0x0>;
         band@0 {
           name = "band";
-          nvmem-cell-names = "mac-address";
-          nvmem-cells = <0x13 0x2>;
           reg = <0x0>;
         };
         band@1 {
           name = "band";
-          nvmem-cell-names = "mac-address";
-          nvmem-cells = <0x13 0x3>;
           reg = <0x1>;
         };
       };

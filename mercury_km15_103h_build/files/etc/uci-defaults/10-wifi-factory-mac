@@ -1,0 +1,23 @@
+#!/bin/sh
+# First-boot: persist factory WiFi MACs in UCI so the wireless stack always
+# uses device-unique addresses, even before the hotplug script has run.
+# Must run after network init so eth0 hardware MAC (set by U-Boot) is readable.
+
+BASE_MAC=$(cat /sys/class/net/eth0/address 2>/dev/null)
+[ -n "$BASE_MAC" ] && [ "$BASE_MAC" != "00:00:00:00:00:00" ] || exit 0
+
+LAST=$(printf '%d' 0x"$(echo "$BASE_MAC" | cut -d: -f6)")
+
+mac_plus() {
+	local n=$(( (LAST + $1) & 0xFF ))
+	echo "$BASE_MAC" | sed "s/:[0-9a-f]\{2\}$/:$(printf '%02x' $n)/"
+}
+
+MAC_R0=$(mac_plus 2)
+MAC_R1=$(mac_plus 3)
+
+uci -q set wireless.radio0.macaddr="$MAC_R0"
+uci -q set wireless.radio1.macaddr="$MAC_R1"
+uci commit wireless 2>/dev/null
+
+logger -t factory-mac "UCI: radio0=$MAC_R0 radio1=$MAC_R1"

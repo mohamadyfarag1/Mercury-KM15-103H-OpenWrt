@@ -1,0 +1,12 @@
+#!/bin/sh /etc/rc.common
+# Suppress the "No spare unmapped blocks" NMBM flood that occurs when NMBM
+# has exhausted its spare-block pool. The message is cosmetic (existing block
+# remappings continue to work) but floods dmesg at ~50 msg/s.
+START=01
+
+start() {
+	# Raise kernel log level threshold so pr_warn messages are suppressed.
+	# Level 4 = only err and above; 3 = only crit and above.
+	# This stops the NMBM warning flood while keeping genuine errors visible.
+	echo 4 > /proc/sys/kernel/printk 2>/dev/null
+}

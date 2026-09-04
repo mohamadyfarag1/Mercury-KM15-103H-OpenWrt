@@ -407,12 +407,14 @@ fi
 # rendering of it. An earlier revision grepped for '0x40004 0x6' and failed a
 # build whose DTB was entirely correct.
 if grep -Eq 'reg = <0x0*40004 0x0*6>' "$DTB_DTS"; then
-    echo "  OK       : mac-base nvmem cell at 0x40004 (absolute 0xC0004)"
+    echo "  OK       : mac-base nvmem cell at Config+0x40004 (absolute 0x140004)"
+    echo "             NOTE: Config is encrypted; cell is defined but not used by"
+    echo "             eth/wifi nodes.  Factory MAC is read from eth0 hardware at"
+    echo "             runtime (U-Boot programs the Ethernet PHY before booting Linux)."
 else
     echo "!!!! the compiled DTB has no mac-base cell covering 0x40004+6."
-    echo "     HARDWARE_MAP.md records the factory base MAC at offset 0x4 of"
-    echo "     the vendor Config partition (0xC0000); our Config starts at"
-    echo "     0x80000, so the cell must read <0x40004 0x6>."
+    echo "     The cell lives in the Config partition (NAND 0x100000); offset"
+    echo "     0x40004 within Config = absolute 0x140004."
     grep -n -A4 'macaddr' "$DTB_DTS" | head -20
     exit 1
 fi
@@ -424,15 +426,17 @@ if grep -qE 'mac-address = \[' "$DTB_DTS"; then
     echo "     Every unit flashed with this image would share that address."
     exit 1
 fi
-echo "  OK       : no hardcoded mac-address - each unit reads its own NAND"
+echo "  OK       : no hardcoded mac-address"
+echo "             WiFi MACs are derived at runtime from eth0 (base+2/+3)"
+echo "             via /etc/hotplug.d/ieee80211/10-factory-mac."
 
-# Block 6 (0xC0000) holds that MAC and is a factory bad block; only the
-# remapping layer makes it readable, and this property is what turns it on.
+# NMBM remaps factory-bad blocks; required for NAND integrity even though
+# the encrypted Config MAC is no longer read via nvmem.
 if grep -q 'mediatek,nmbm' "$DTB_DTS"; then
-    echo "  OK       : mediatek,nmbm present (bad-block remapping enabled)"
+    echo "  OK       : mediatek,nmbm present (NAND bad-block management enabled)"
 else
-    echo "!!!! the compiled DTB lacks mediatek,nmbm - block 6 holding the"
-    echo "     factory MAC would be read raw and fail with an ECC error."
+    echo "!!!! the compiled DTB lacks mediatek,nmbm."
+    echo "     Bad-block remapping is disabled; NAND writes may corrupt data."
     exit 1
 fi
 
