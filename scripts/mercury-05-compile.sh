@@ -147,10 +147,33 @@ fi
 echo "======================================="
 echo "Step 6: Verifying mt76 channel table in shipped driver..."
 echo "======================================="
-MT76_MAC=$(find build_dir -name "mac80211.c" \
-    -exec grep -l "mt76_channels_5ghz" {} \; 2>/dev/null | head -n1)
-if [ -z "$MT76_MAC" ]; then
-    echo "!!!! mt76/mac80211.c not found in build_dir after compilation."
+# The build tree contains TWO copies of mt76:
+#   1. the kernel's own in-tree driver, under
+#      build_dir/toolchain-*/linux-*/drivers/net/wireless/mediatek/mt76/
+#      - part of the kernel source but NOT built (OpenWrt disables the
+#        in-tree driver and uses the package instead), so it always
+#        shows the stock 28 channels;
+#   2. the mt76 PACKAGE, at build_dir/target-*/linux-*/mt76-<version>/
+#      - the git snapshot kmod-mt7915e is actually compiled from, and
+#        the only tree 999-mercury-superchannels.patch targets.
+# A bare `find build_dir -name mac80211.c | head -1` returns whichever
+# the filesystem hands back first. On run b615d33 that was the unused
+# in-tree copy, so the check reported 28 and failed the build even
+# though the package tree is the one that matters. Pin to the package.
+MT76_PKG_DIR=$(ls -d build_dir/target-*/linux-*/mt76-* 2>/dev/null | head -n1)
+if [ -z "$MT76_PKG_DIR" ] || [ ! -d "$MT76_PKG_DIR" ]; then
+    echo "!!!! mt76 PACKAGE build dir is missing after the build."
+    echo "     Expected: build_dir/target-*/linux-*/mt76-<version>/"
+    echo "     kmod-mt7915e is built from this tree - without it the"
+    echo "     firmware would ship with no MediaTek WiFi driver at all."
+    echo "--- what exists under build_dir/target-*/linux-*/ ---"
+    ls -d build_dir/target-*/linux-*/*/ 2>/dev/null | head -20
+    exit 1
+fi
+MT76_MAC="$MT76_PKG_DIR/mac80211.c"
+if [ ! -f "$MT76_MAC" ]; then
+    echo "!!!! $MT76_MAC not found inside the mt76 package tree."
+    ls -la "$MT76_PKG_DIR" 2>/dev/null | head -20
     exit 1
 fi
 # Count only real array entries - CHAN5G(36, 5180). A plain
@@ -158,16 +181,40 @@ fi
 # macro and reports 69 for a 68-channel table, which is exactly the
 # kind of off-by-one that turns a threshold check into a coin flip.
 CHAN5G_COUNT=$(grep -cE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" 2>/dev/null || true)
-echo "Shipped mt76 source : $MT76_MAC"
-echo "CHAN5G entries      : $CHAN5G_COUNT  (stock ~28, patched 68)"
+echo "mt76 package source : $MT76_MAC"
+echo "CHAN5G entries      : $CHAN5G_COUNT  (stock 28, patched 68)"
 if [ "${CHAN5G_COUNT:-0}" -lt 60 ]; then
-    echo "!!!! Shipped mt76 driver has only $CHAN5G_COUNT CHAN5G entries."
-    echo "     The 999-mercury-superchannels.patch did not reach this build."
-    echo "     The driver exposes fewer channels than the regdb allows,"
-    echo "     so selecting extended channels will fail silently."
+    echo "!!!! The mt76 package still carries only $CHAN5G_COUNT CHAN5G entries,"
+    echo "     so 999-mercury-superchannels.patch did NOT apply. The driver"
+    echo "     would expose fewer channels than the regdb allows and every"
+    echo "     extended channel would fail silently on the device."
+    echo "--- patches present in the package ---"
+    ls -l package/kernel/mt76/patches/ 2>/dev/null || echo "(no patches dir)"
+    echo "--- first lines of our patch ---"
+    head -12 package/kernel/mt76/patches/999-mercury-superchannels.patch 2>/dev/null
     exit 1
 fi
-echo "OK: shipped mt76 carries the extended $CHAN5G_COUNT-channel table."
+echo "OK: mt76 package carries the extended $CHAN5G_COUNT-channel table."
+
+# Prove the PATCHED source is what actually got compiled: a module must
+# exist inside this same package tree. Counting channels in a source
+# file that was never compiled would be a hollow check.
+MT76_KO=$(find "$MT76_PKG_DIR" \( -name 'mt76.ko' -o -name 'mt7915e.ko' \) 2>/dev/null | head -n4)
+if [ -z "$MT76_KO" ]; then
+    echo "!!!! No mt76.ko / mt7915e.ko was built inside $MT76_PKG_DIR."
+    echo "     The patched source exists but was never compiled into a"
+    echo "     module, so the device would have no WiFi driver."
+    exit 1
+fi
+echo "Built modules       :"
+echo "$MT76_KO" | sed 's|^|  |'
+
+# Report the kernel's unused in-tree copy explicitly so its stock 28
+# channels are never again mistaken for a failure.
+INTREE=$(ls build_dir/toolchain-*/linux-*/drivers/net/wireless/mediatek/mt76/mac80211.c 2>/dev/null | head -n1)
+if [ -n "$INTREE" ]; then
+    echo "(kernel in-tree mt76: $(grep -cE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$INTREE") channels - unused by design, not built)"
+fi
 
 # ---------------------------------------------------------------
 # Step 7: Verify sysupgrade image exists.
@@ -184,6 +231,11 @@ if [ -z "$IMAGE_FILE" ] || [ ! -f "$IMAGE_FILE" ]; then
 fi
 FILESIZE=$(stat -c%s "$IMAGE_FILE" 2>/dev/null || wc -c < "$IMAGE_FILE")
 echo "image : $IMAGE_FILE  ($FILESIZE bytes)"
+# Always show everything that was produced. Without this the log says
+# nothing about which images exist, so a missing initramfs (or an image
+# named differently than expected) can only be guessed at afterwards.
+echo "--- all files in $BIN_DIR ---"
+ls -la "$BIN_DIR" 2>/dev/null | sed 's/^/  /' || true
 
 # ---------------------------------------------------------------
 # Step 8: Verify mt7915 firmware made it into the rootfs.
@@ -224,12 +276,30 @@ if [ -z "$REGDB" ]; then
     exit 1
 fi
 REGDB_SZ=$(wc -c < "$REGDB")
-if [ "$REGDB_SZ" -lt 5000 ]; then
-    echo "WARNING: regulatory.db is $REGDB_SZ bytes - may be the stock file."
-    echo "         Expected > 5000 bytes for the all-country unlocked version."
-else
-    echo "  OK: custom regulatory.db ($REGDB_SZ bytes)"
+
+# Compare against the file Step 1 generated instead of against a guessed
+# byte count. Both the wireless-regdb package and our files/ overlay
+# install /lib/firmware/regulatory.db; if the package's stock database
+# ever won that race a size threshold could still pass while every
+# extended channel stayed locked. Identical checksums are the only proof
+# that the unlocked database is the one actually shipping.
+OURS="files/lib/firmware/regulatory.db"
+if [ ! -f "$OURS" ]; then
+    echo "!!!! $OURS missing - Step 1 did not stage the custom database."
+    exit 1
 fi
+SUM_ROOTFS=$(md5sum "$REGDB" | awk '{print $1}')
+SUM_OURS=$(md5sum "$OURS"   | awk '{print $1}')
+echo "  rootfs copy : $REGDB ($REGDB_SZ bytes, md5 ${SUM_ROOTFS:0:12})"
+echo "  generated   : $OURS ($(wc -c < "$OURS") bytes, md5 ${SUM_OURS:0:12})"
+if [ "$SUM_ROOTFS" != "$SUM_OURS" ]; then
+    echo "!!!! The regulatory.db in the rootfs is NOT the one we generated."
+    echo "     The stock wireless-regdb database has overwritten ours, so the"
+    echo "     68-channel driver table would be regulatory-blocked and every"
+    echo "     extended channel would silently refuse to transmit."
+    exit 1
+fi
+echo "  OK: unlocked regulatory.db is byte-identical in the rootfs."
 
 # ---------------------------------------------------------------
 # Step 9.5: Verify the UBI tools mercury.sh now depends on are in the
@@ -279,6 +349,32 @@ if [ -z "$KERNEL_MEMBER" ] || [ -z "$ROOT_MEMBER" ]; then
 fi
 echo "  OK: sysupgrade tar has both '$KERNEL_MEMBER' and '$ROOT_MEMBER'"
 
+# The bootloader on this board boots a FIT and verifies its crc32+sha1
+# before jumping; a legacy uImage is rejected and the device simply does
+# not come up. That is precisely what the ramips default KERNEL recipe
+# ("uImage lzma") produced here until the device definition was given an
+# explicit "fit lzma" KERNEL. Check the magic so the same class of defect
+# can never ship silently again:
+#   FIT / DTB magic = d0 0d fe ed
+#   legacy uImage   = 27 05 19 56
+KMAGIC=$(tar -xOf "$TAR_IMAGE" "$KERNEL_MEMBER" 2>/dev/null | od -An -tx1 -N4 | tr -d ' \n')
+echo "  kernel magic: $KMAGIC"
+case "$KMAGIC" in
+    d00dfeed)
+        echo "  OK: kernel is a FIT image (denx,fit) as the bootloader requires." ;;
+    27051956)
+        echo "!!!! kernel is a LEGACY uImage (magic 27051956), not a FIT."
+        echo "     Both firmware banks are declared compatible = \"denx,fit\" in"
+        echo "     the DTS and U-Boot verifies a FIT header, so this image would"
+        echo "     flash successfully and then fail to boot."
+        echo "     Fix: set KERNEL := kernel-bin | lzma | fit lzma ...dtb in the"
+        echo "     device definition (scripts/mercury-02-patch-makefiles.sh)."
+        exit 1 ;;
+    *)
+        echo "!!!! kernel has unrecognised magic '$KMAGIC' - expected d00dfeed (FIT)."
+        exit 1 ;;
+esac
+
 echo "======================================="
 echo "✅ BUILD SUCCESSFUL"
 echo "image : $(basename "$IMAGE_FILE")  ($FILESIZE bytes)"
@@ -303,62 +399,94 @@ echo "======================================="
 RECOVERY_DIR="../recovery_files"
 mkdir -p "$RECOVERY_DIR"
 
-# Find u-boot binary (built by CONFIG_PACKAGE_uboot-mt7621)
-UBOOT_BIN=$(find build_dir -name "u-boot.bin" \
-    -path "*/uboot-mt7621*" 2>/dev/null | head -n1)
-if [ -n "$UBOOT_BIN" ]; then
-    cp "$UBOOT_BIN" "$RECOVERY_DIR/u-boot-mt7621.bin"
-    echo "  OK: u-boot binary  ($(wc -c < "$RECOVERY_DIR/u-boot-mt7621.bin") bytes)"
-else
-    echo "  WARN: u-boot-mt7621.bin not found - check CONFIG_PACKAGE_uboot-mt7621=y"
-fi
+# NOTE ON U-BOOT: this build cannot produce one. OpenWrt v24.10.2 has no
+# U-Boot package for ramips/mt7621 at all (only uboot-mediatek, -mvebu,
+# -ath79, ...), because MT7621 boards run the vendor bootloader. Earlier
+# revisions of this script searched build_dir for a u-boot.bin that could
+# never exist and then just warned, which read like "optional" when it is
+# actually a hard prerequisite of the UART recovery path. The bootloader
+# has to be dumped off the device instead - and the device's own copy is
+# the only one guaranteed to match this board's DDR and NAND timings:
+#     ssh/telnet to the box, then:  dd if=/dev/mtd0 of=/tmp/uboot_vendor.bin
+echo "  u-boot: not buildable for mt7621 - dump /dev/mtd0 off the device"
+echo "          (see HOW_TO_USE.txt; this is expected, not a failure)"
 
-# Find initramfs kernel image
-INITRAMFS=$(find "$BIN_DIR" -name "*mercury_km15-103h*initramfs*" 2>/dev/null | head -n1)
+# The initramfs image IS buildable, and the whole first-install and
+# brick-recovery story depends on it, so treat a missing one as a real
+# defect rather than a warning.
+INITRAMFS=$(find "$BIN_DIR" -type f -name "*mercury_km15-103h*initramfs*.itb" 2>/dev/null | head -n1)
+[ -n "$INITRAMFS" ] || INITRAMFS=$(find "$BIN_DIR" -type f -name "*mercury_km15-103h*initramfs*" 2>/dev/null | head -n1)
 if [ -n "$INITRAMFS" ]; then
     cp "$INITRAMFS" "$RECOVERY_DIR/$(basename "$INITRAMFS")"
     echo "  OK: initramfs image ($(wc -c < "$INITRAMFS") bytes)"
 else
-    echo "  WARN: initramfs-kernel.bin not found"
-    echo "        Add KERNEL_INITRAMFS + IMAGE/initramfs-kernel.bin to device def"
+    echo "!!!! No *-initramfs-uImage.itb was produced."
+    echo "     Without it there is no way to boot OpenWrt from RAM, which is"
+    echo "     how this device is meant to be installed and rescued (its"
+    echo "     U-Boot has no interactive console except the SPL Ymodem trap)."
+    echo "--- images that WERE produced ---"
+    ls -la "$BIN_DIR" 2>/dev/null | sed 's/^/     /'
+    echo "--- initramfs-related settings ---"
+    grep -E 'INITRAMFS' .config 2>/dev/null | sed 's/^/     /' || echo "     (no INITRAMFS symbol in .config)"
+    grep -nE 'KERNEL_INITRAMFS|initramfs-kernel' target/linux/ramips/image/mt7621.mk 2>/dev/null |
+        grep -A2 -B2 mercury | sed 's/^/     /' || true
+    exit 1
 fi
 
 # Write the U-Boot boot commands to a README
 cat > "$RECOVERY_DIR/HOW_TO_USE.txt" << 'HOWTO'
-Mercury KM15-103H UART Recovery Procedure
-==========================================
+Mercury KM15-103H UART Recovery / First Install
+===============================================
 
-STEP 1 - Get U-Boot running in RAM:
+WHAT IS IN THIS ARCHIVE
+  *-initramfs-uImage.itb   OpenWrt that runs entirely from RAM
+  HOW_TO_USE.txt           this file
+  (there is deliberately no u-boot.bin - see STEP 0)
+
+STEP 0 - Get a u-boot.bin (ONE TIME, while the device still boots)
+  OpenWrt cannot build U-Boot for MT7621; the vendor bootloader is the
+  only compatible one. Dump it off the running device and keep it safe:
+     dd if=/dev/mtd0 of=/tmp/uboot_vendor.bin      # "Bootloader" partition
+  then copy it to your PC (scp, or tftp/wget from the box).
+  Without this file the Ymodem step below has nothing to send.
+
+STEP 1 - Get U-Boot running in RAM
   1. Connect UART (115200 8N1) + Tera Term
   2. Power on the device
-  3. When SPL starts printing, short NAND Pin 9 (#CE) to GND
+  3. While SPL is still printing, short NAND pin 9 (#CE) to GND
+     -> SPL fails to read the bootloader and falls back to Ymodem
   4. Wait for: "Accepted mode is Ymodem-1K."
-  5. In Tera Term: File > Transfer > YMODEM > Send > pick u-boot-mt7621.bin
-  6. U-Boot boots into RAM -> you get a "#" prompt
+  5. Tera Term: File > Transfer > YMODEM > Send -> uboot_vendor.bin
+  6. U-Boot boots into RAM and gives you a "#" prompt
 
-STEP 2 - Load OpenWrt initramfs into RAM:
+STEP 2 - Load OpenWrt initramfs into RAM
   At the U-Boot "#" prompt:
-    loady 0x84000000
-  In Tera Term: File > Transfer > YMODEM > Send -> pick *-initramfs-kernel.bin
+      loady 0x84000000
+  Tera Term: File > Transfer > YMODEM > Send -> *-initramfs-uImage.itb
   Then:
-    bootm 0x84000000
-  OpenWrt boots from RAM (no NAND mounted).
+      bootm 0x84000000
+  OpenWrt now runs from RAM with NO NAND partition mounted.
 
-STEP 3 - Flash to NAND permanently:
-  SSH into 192.168.1.1 (default IP in initramfs):
-    scp *-sysupgrade.bin root@192.168.1.1:/tmp/
-    ssh root@192.168.1.1 "sysupgrade -n /tmp/*-sysupgrade.bin"
+STEP 3 - Flash to NAND permanently
+  SSH into 192.168.1.1 (the initramfs default IP):
+      scp *-sysupgrade.bin root@192.168.1.1:/tmp/
+      ssh root@192.168.1.1 "sysupgrade -n /tmp/*-sysupgrade.bin"
 
-STEP 4 (OPTIONAL) - Erase and repartition NAND before flashing:
-  From initramfs SSH (DANGER - erases everything except Bootloader/Factory):
-    flash_erase /dev/mtd2 0 0   # Config
-    flash_erase /dev/mtd3 0 0   # firmware
-    flash_erase /dev/mtd4 0 0   # firmware2
-    flash_erase /dev/mtd5 0 0   # Userdata
-  Then do sysupgrade as in Step 3.
+STEP 4 (OPTIONAL) - wipe NAND before flashing
+  From the initramfs shell, where nothing is mounted from NAND:
+      cat /proc/mtd                 # confirm the numbers first!
+      flash_erase /dev/mtdN 0 0     # Config / firmware / firmware2 / Userdata
+  then do STEP 3.
 
-NOTE: NEVER erase /dev/mtd0 (Bootloader) or /dev/mtd1 (Factory).
-      Factory contains WiFi calibration - losing it kills the radio.
+  NEVER erase the Bootloader or Factory partitions:
+  Bootloader = the only thing that can start the board at all.
+  Factory    = WiFi EEPROM + calibration; erasing it kills the radio
+               permanently and it cannot be regenerated.
+
+AFTER FLASHING - confirm the build is complete
+      mercury-wifi-check            # channels, 160 MHz, power, firmware blobs
+      iw phy phy1 info | grep -A2 "160 MHz"
+      grep -c processor /proc/cpuinfo    # expect 4
 HOWTO
 echo "  OK: HOW_TO_USE.txt written"
 

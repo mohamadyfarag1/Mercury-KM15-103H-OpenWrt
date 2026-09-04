@@ -16,15 +16,35 @@ else
     cat << 'EOF' >> "$MK_FILE"
 
 define Device/mercury_km15-103h
+  # Device/nand supplies the NAND geometry this board actually has
+  # (BLOCKSIZE 128k, PAGESIZE 2048, UBINIZE_OPTS -E 5) plus the DSA
+  # migration shim. Without inheriting it the UBI rootfs was being
+  # generated with the target defaults instead of this flash's real
+  # erase/page size.
+  $(Device/nand)
   IMAGE_SIZE := 50331648
   DEVICE_VENDOR := Mercury
   DEVICE_MODEL := KM15-103H
   DEVICE_DTS := mt7621_mercury_km15-103h
   SUPPORTED_DEVICES := mercury,km15-103h
   DEVICE_PACKAGES := kmod-mt7915e mt7915-firmware uboot-envtools luci luci-ssl iwinfo wireless-regdb irqbalance
+  # This board's U-Boot boots a FIT image: both firmware banks are
+  # declared compatible = "denx,fit" in the DTS, and the bootloader
+  # verifies the FIT's crc32+sha1 before jumping. The ramips default
+  # KERNEL is "uImage lzma", so leaving it unset (as this definition
+  # previously did) produced a legacy uImage the bootloader will not
+  # accept - a firmware that builds and flashes cleanly and then does
+  # not boot. Build a real FIT instead.
+  KERNEL := kernel-bin | lzma | fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb
+  # Same FIT for the RAM-boot image, so U-Boot can 'bootm' it directly.
   KERNEL_INITRAMFS := $$(KERNEL)
+  # Names the RAM image *-initramfs-uImage.itb (KERNEL_INITRAMFS_IMAGE =
+  # <prefix>-initramfs + this suffix), matching the .itb convention used
+  # by FIT targets like ipq40xx/ipq806x. Setting KERNEL_INITRAMFS alone
+  # is what makes the image get built at all - no IMAGE/initramfs-* entry
+  # is needed, and the one used here before was simply inert.
+  KERNEL_INITRAMFS_SUFFIX := -uImage.itb
   IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
-  IMAGE/initramfs-kernel.bin := append-kernel
 endef
 TARGET_DEVICES += mercury_km15-103h
 

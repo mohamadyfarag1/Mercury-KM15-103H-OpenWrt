@@ -114,12 +114,13 @@ jobs:
             openwrt/bin/targets/ramips/mt7621/sha256sums
           if-no-files-found: error
 
-      # Recovery artifact: u-boot.bin + initramfs-kernel.bin + instructions.
-      # Use when: device is bricked OR you want to flash from a clean NAND state.
-      # Procedure: short NAND Pin 9 (#CE) -> Ymodem u-boot.bin -> loady -> bootm
-      # -> OpenWrt in RAM -> sysupgrade -n sysupgrade.bin
-      # See recovery_files/HOW_TO_USE.txt for full step-by-step instructions.
-      - name: Upload UART Recovery Files (u-boot + initramfs + instructions)
+      # Recovery artifact: *-initramfs-uImage.itb + instructions.
+      # A FIT image U-Boot can 'bootm' straight into RAM, same idea as the
+      # ipq40xx .itb builds. No u-boot.bin is shipped: OpenWrt has no U-Boot
+      # package for ramips/mt7621 at all, so the bootloader must be dumped
+      # off the device (dd if=/dev/mtd0) - see recovery_files/HOW_TO_USE.txt.
+      # Use when: first install, device bricked, or flashing from a clean NAND.
+      - name: Upload UART Recovery Files (initramfs + instructions)
         if: success()
         uses: actions/upload-artifact@v4
         with:

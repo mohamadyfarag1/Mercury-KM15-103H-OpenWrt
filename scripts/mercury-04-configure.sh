@@ -70,9 +70,23 @@ CONFIG_TARGET_UBIFS_COMPRESSION_ZSTD=y
 # so no initramfs image was produced (Step 9.7 would only have warned).
 CONFIG_TARGET_ROOTFS_INITRAMFS=y
 
-# Build the U-Boot binary so it can be sent via Ymodem to the SPL.
-# Binary ends up in build_dir as u-boot-mt7621/u-boot.bin.
-CONFIG_PACKAGE_uboot-mt7621=y
+# NOTE: there is deliberately no U-Boot package here. OpenWrt v24.10.2
+# ships uboot-mediatek, uboot-mvebu, ... but NOTHING for ramips/mt7621 -
+# MT7621 boards always run the vendor bootloader, so a u-boot.bin simply
+# cannot be produced by this build. An earlier CONFIG_PACKAGE_uboot-mt7621=y
+# here was silently dropped by `make defconfig` (no such package) and
+# quietly produced nothing. For the UART Ymodem recovery path the
+# bootloader must be dumped off the device itself:
+#     dd if=/dev/mtd0 of=/tmp/uboot_vendor.bin   (Bootloader partition)
+# That copy is also the only one guaranteed to match this board's DDR
+# and NAND timings.
+
+# nand-utils gives the running device flash_erase / nandwrite / nanddump.
+# mercury.sh itself uses OpenWrt's `mtd` for writes, but having the raw
+# tools on the box is what makes manual recovery over SSH possible when
+# something goes wrong - a firmware that can only be fixed over UART is
+# a firmware with a hole in it.
+CONFIG_PACKAGE_nand-utils=y
 
 EOF
 
@@ -102,5 +116,75 @@ if ! grep -q '^CONFIG_TARGET_ramips_mt7621_DEVICE_mercury_km15-103h=y' .config; 
 	exit 1
 fi
 echo "✅ Device symbol confirmed enabled."
+
+# ---------------------------------------------------------------
+# Audit what actually survived `make defconfig`.
+#
+# defconfig silently DROPS any symbol whose package does not exist or
+# whose dependencies are unmet - no warning, no error. That is how
+# CONFIG_PACKAGE_uboot-mt7621=y sat in this file for several builds
+# producing absolutely nothing (there is no such package for ramips).
+# Anything we depend on is checked here instead of being discovered
+# missing on the device.
+# ---------------------------------------------------------------
+echo ""
+echo "Auditing which options survived defconfig..."
+
+# Dropping any of these produces a firmware that is broken on the device,
+# so they abort the build rather than ship a hole.
+CRITICAL="CONFIG_PACKAGE_kmod-mt7915e \
+CONFIG_PACKAGE_mt7915-firmware \
+CONFIG_PACKAGE_ubi-utils \
+CONFIG_PACKAGE_mtd \
+CONFIG_PACKAGE_wireless-regdb \
+CONFIG_TARGET_ROOTFS_SQUASHFS"
+
+# Useful but not fatal: the build still yields a working router without them.
+OPTIONAL="CONFIG_TARGET_ROOTFS_INITRAMFS \
+CONFIG_PACKAGE_nand-utils \
+CONFIG_PACKAGE_irqbalance \
+CONFIG_PACKAGE_luci \
+CONFIG_PACKAGE_uboot-envtools"
+
+MISSING=""
+for SYM in $CRITICAL; do
+	if grep -q "^${SYM}=y" .config; then
+		echo "  OK       : $SYM"
+	else
+		echo "  DROPPED  : $SYM   <-- CRITICAL"
+		MISSING="$MISSING $SYM"
+	fi
+done
+for SYM in $OPTIONAL; do
+	if grep -q "^${SYM}=y" .config; then
+		echo "  OK       : $SYM"
+	else
+		echo "  dropped  : $SYM   (optional)"
+	fi
+done
+
+if [ -n "$MISSING" ]; then
+	echo ""
+	echo "❌ ERROR: defconfig dropped critical option(s):$MISSING"
+	echo "   These are silently removed when the package name is wrong or a"
+	echo "   dependency is unmet. Building on would produce firmware that is"
+	echo "   missing the WiFi driver, the UBI tools sysupgrade needs, or the"
+	echo "   regulatory database - all of which only fail once flashed."
+	echo ""
+	for SYM in $MISSING; do
+		echo "--- lines mentioning ${SYM#CONFIG_PACKAGE_} in .config ---"
+		grep -i "${SYM#CONFIG_PACKAGE_}" .config | head -5 || echo "(symbol unknown to Kconfig at all)"
+	done
+	exit 1
+fi
+
+# Not fatal on its own, but the whole first-install / brick-recovery plan
+# rests on being able to boot OpenWrt from RAM, so make its absence loud.
+if ! grep -q '^CONFIG_TARGET_ROOTFS_INITRAMFS=y' .config; then
+	echo ""
+	echo "⚠️  WARNING: TARGET_ROOTFS_INITRAMFS was dropped - no *-initramfs-kernel.bin"
+	echo "    will be produced, so the UART Ymodem 'boot OpenWrt from RAM' recovery"
+	echo "    path is unavailable and the only install route is sysupgrade."
+fi
 
 echo "✅ Configuration complete."
