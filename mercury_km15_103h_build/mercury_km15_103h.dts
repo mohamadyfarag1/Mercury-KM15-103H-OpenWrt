@@ -391,12 +391,12 @@
           #size-cells = <0x1>;
           compatible = "fixed-layout";
           name = "nvmem-layout";
-          macaddr@4 {
+          macaddr@4000a {
             #nvmem-cell-cells = <0x1>;
             compatible = "mac-base";
             name = "macaddr";
             phandle = <0x13>;
-            reg = <0x4 0x6>;
+            reg = <0x4000a 0x6>;
           };
         };
       };
