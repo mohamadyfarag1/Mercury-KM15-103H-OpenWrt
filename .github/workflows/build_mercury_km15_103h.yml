@@ -45,6 +45,27 @@ jobs:
             libncurses5-dev libssl-dev python3-distutils python3-setuptools rsync unzip zlib1g-dev \
             file wget device-tree-compiler python3-pip python3-m2crypto swig libelf-dev
 
+      # Cache the OpenWrt source package downloads across runs.
+      # Key includes the config hash so adding/removing packages busts the cache.
+      # restore-keys lets a partial cache hit still skip most re-downloads.
+      - name: Cache OpenWrt downloads (dl/)
+        uses: actions/cache@v4
+        with:
+          path: openwrt/dl
+          key: openwrt-dl-${{ hashFiles('scripts/mercury-04-configure.sh', 'scripts/mercury-05-compile.sh') }}
+          restore-keys: |
+            openwrt-dl-
+
+      # ccache wraps gcc/g++ transparently; saves ~40 min on subsequent builds
+      # when only a small part of the tree changed (e.g. a script or config tweak).
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+        with:
+          max-size: 2G
+          key: openwrt-ccache-ramips-mt7621
+          restore-keys: |
+            openwrt-ccache-ramips-mt7621
+
       - name: Clone OpenWrt Source
         run: |
           git clone --depth 1 --branch v24.10.2 https://git.openwrt.org/openwrt/openwrt.git openwrt
