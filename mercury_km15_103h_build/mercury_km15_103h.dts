@@ -71,7 +71,6 @@
     resets = <0x2 0x6 0x2 0x17>;
     mac@0 {
       compatible = "mediatek,eth-mac";
-      mac-address = [0c 96 cd 9f cb 1a];
       name = "mac";
       nvmem-cell-names = "mac-address";
       nvmem-cells = <0x13 0x1>;
@@ -161,7 +160,6 @@
           name = "ports";
           port@0 {
             label = "wan";
-            mac-address = [0c 96 cd 9f cb 19];
             name = "port";
             nvmem-cell-names = "mac-address";
             nvmem-cells = <0x13 0x0>;
@@ -391,12 +389,12 @@
           #size-cells = <0x1>;
           compatible = "fixed-layout";
           name = "nvmem-layout";
-          macaddr@4000a {
+          macaddr@40004 {
             #nvmem-cell-cells = <0x1>;
             compatible = "mac-base";
             name = "macaddr";
             phandle = <0x13>;
-            reg = <0x4000a 0x6>;
+            reg = <0x40004 0x6>;
           };
         };
       };
@@ -412,12 +410,12 @@
           partition@0 {
             label = "kernel";
             name = "partition";
-            reg = <0x0 0x400000>;
+            reg = <0x0 0x600000>;
           };
-          partition@400000 {
+          partition@600000 {
             label = "ubi";
             name = "partition";
-            reg = <0x400000 0x5c00000>;
+            reg = <0x600000 0x5a00000>;
           };
         };
       };
@@ -651,14 +649,12 @@
         nvmem-cells = <0x1d 0x1e>;
         reg = <0x0 0x0 0x0 0x0 0x0>;
         band@0 {
-          mac-address = [0c 96 cd 9f cb 1b];
           name = "band";
           nvmem-cell-names = "mac-address";
           nvmem-cells = <0x13 0x2>;
           reg = <0x0>;
         };
         band@1 {
-          mac-address = [0c 96 cd 9f cb 1c];
           name = "band";
           nvmem-cell-names = "mac-address";
           nvmem-cells = <0x13 0x3>;

@@ -11,16 +11,13 @@ mkdir -p $(dirname "$dts_target")
 
 echo "Setting up Device Tree for Mercury KM15-103H..."
 
-# If original binary DTB exists, decompile it cleanly with dtc
-if [ -f "../mercury_km15_103h_build/device_tree.dtb" ]; then
-    echo "Decompiling pristine factory device_tree.dtb using dtc..."
-    dtc -I dtb -O dts -o "$dts_target" ../mercury_km15_103h_build/device_tree.dtb || true
-fi
-
-# Fallback to pre-generated DTS if dtc decompilation was skipped or empty
-if [ ! -s "$dts_target" ]; then
-    echo "Using pre-extracted mercury_km15_103h.dts..."
+# Use modified canonical DTS source
+if [ -f "../mercury_km15_103h_build/mercury_km15_103h.dts" ]; then
+    echo "Copying canonical mercury_km15_103h.dts (with 6MB kernel and 0x40004 MAC fix)..."
     cp ../mercury_km15_103h_build/mercury_km15_103h.dts "$dts_target"
+elif [ -f "../mercury_km15_103h_build/device_tree.dtb" ]; then
+    echo "Decompiling factory device_tree.dtb using dtc..."
+    dtc -I dtb -O dts -o "$dts_target" ../mercury_km15_103h_build/device_tree.dtb || true
 fi
 
 # Clean up any root name property and verify DTS syntax

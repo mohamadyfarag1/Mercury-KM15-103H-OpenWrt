@@ -290,7 +290,20 @@ mercury_switch_boot_slot() {
 	local target_slot="$2"
 	local backup_file="/tmp/config_backup.bin"
 	local modified_file="/tmp/config_modified.bin"
-	local verify_byte
+	local verify_byte mac_hex
+
+	# Erasing Config is the single most dangerous thing this script does:
+	# the partition spans 0x80000-0x100000, which contains the factory MAC
+	# at offset 0x40004 (absolute 0xC0004).  That address lives in block 6,
+	# a factory bad block that NMBM transparently remaps.  A read-modify-
+	# erase-write cycle over it can permanently destroy the MAC.  So do not
+	# erase at all unless the slot byte is genuinely wrong - in single-bank
+	# mode the target is always 1, so after the first write this is a no-op.
+	if [ "$(dd if="$config_mtd" bs=1 skip=10 count=1 2>/dev/null | hexdump -e '"%d"')" = "$target_slot" ] &&
+	   [ "$(dd if="$config_mtd" bs=1 skip=131082 count=1 2>/dev/null | hexdump -e '"%d"')" = "$target_slot" ]; then
+		echo "Mercury: Boot slot already $target_slot - leaving Config untouched."
+		return 0
+	fi
 
 	echo "Mercury: Switching boot slot to $target_slot"
 
@@ -300,6 +313,20 @@ mercury_switch_boot_slot() {
 		echo "Mercury: ERROR - Failed to backup Config partition"
 		return 1
 	fi
+
+	# If the backup did not capture a plausible MAC, the read hit the bad
+	# block and writing this image back would erase the factory MAC for
+	# good.  Refuse rather than destroy unrecoverable factory data.
+	mac_hex=$(dd if="$backup_file" bs=1 skip=262148 count=6 2>/dev/null | hexdump -v -e '6/1 "%02x"')
+	case "$mac_hex" in
+		"" | 000000000000 | ffffffffffff)
+			echo "Mercury: ERROR - Config backup has no valid MAC at 0x40004 (read '$mac_hex')."
+			echo "Mercury: Refusing to erase Config - that would destroy the factory MAC."
+			rm -f "$backup_file"
+			return 1
+			;;
+	esac
+	echo "Mercury: Config backup OK (factory MAC $mac_hex preserved)"
 
 	cp "$backup_file" "$modified_file"
 	if [ ! -f "$modified_file" ]; then

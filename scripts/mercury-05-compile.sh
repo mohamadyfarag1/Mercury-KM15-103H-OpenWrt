@@ -452,31 +452,46 @@ STEP 0 - Get a u-boot.bin (ONE TIME, while the device still boots)
 
 STEP 1 - Get U-Boot running in RAM
   1. Connect UART (115200 8N1) + Tera Term
-  2. Power on the device
-  3. While SPL is still printing, short NAND pin 9 (#CE) to GND
-     -> SPL fails to read the bootloader and falls back to Ymodem
-  4. Wait for: "Accepted mode is Ymodem-1K."
-  5. Tera Term: File > Transfer > YMODEM > Send -> uboot_vendor.bin
-  6. U-Boot boots into RAM and gives you a "#" prompt
+  2. Short NAND pins 29 & 30 (or pin 9 #CE) for 1 second upon power-on
+     -> SPL fails to read NAND bootloader and enters emergency mode
+  3. Wait for: "Accepted mode is Ymoden-1K. CCCC"
+  4. Tera Term: File > Transfer > YMODEM > Send -> u-boot-cli-stop.bin
+  5. U-Boot boots into RAM and stops at the "Mercury#" prompt
 
-STEP 2 - Load OpenWrt initramfs into RAM
-  At the U-Boot "#" prompt:
-      loady 0x84000000
-  Tera Term: File > Transfer > YMODEM > Send -> *-initramfs-uImage.itb
-  Then:
-      bootm 0x84000000
-  OpenWrt now runs from RAM with NO NAND partition mounted.
+STEP 2 - Load OpenWrt initramfs into RAM via TFTP
+  Connect PC Ethernet to LAN port, set PC static IP to 192.168.1.2.
+  Run TFTP server (e.g. Tftpd64) on PC hosting *-initramfs-uImage.itb.
+  At the U-Boot "Mercury#" prompt:
+      setenv ipaddr 192.168.1.1
+      setenv serverip 192.168.1.2
+      tftpboot 0x80010000 openwrt-ramips-mt7621-mercury_km15-103h-initramfs-uImage.itb
+      bootm 0x80010000
+  OpenWrt now boots and runs entirely from RAM with NO NAND partition mounted.
 
 STEP 3 - Flash to NAND permanently
-  SSH into 192.168.1.1 (the initramfs default IP):
-      scp *-sysupgrade.bin root@192.168.1.1:/tmp/
-      ssh root@192.168.1.1 "sysupgrade -n /tmp/*-sysupgrade.bin"
+  The initramfs uses this build's LAN address 192.168.100.1 and its DHCP
+  server is disabled, so give the PC a static 192.168.100.2/24 first.
+      scp *-sysupgrade.bin root@192.168.100.1:/tmp/
+      ssh root@192.168.100.1 "sysupgrade -n /tmp/*-sysupgrade.bin"
+
+  First, confirm THIS unit's own factory MAC is readable.  The DTS carries
+  no hardcoded MAC on purpose - every unit derives all four addresses from
+  its own NAND - so a unit whose Config block is damaged must be caught
+  here rather than shipped with a random MAC:
+      cfg=$(sed -n 's/^mtd\([0-9]*\):.*"Config".*/\1/p' /proc/mtd)
+      hexdump -C /dev/mtd$cfg -s 0x40004 -n 6
+  It must match the label on the case.  All 00 or all ff means that block
+  is damaged - stop and recover that unit before flashing it.
 
 STEP 4 (OPTIONAL) - wipe NAND before flashing
   From the initramfs shell, where nothing is mounted from NAND:
       cat /proc/mtd                 # confirm the numbers first!
-      flash_erase /dev/mtdN 0 0     # Config / firmware / firmware2 / Userdata
+      flash_erase /dev/mtdN 0 0     # firmware / Userdata ONLY
   then do STEP 3.
+
+  NEVER erase Config: it holds the per-unit factory MAC at 0x40004, it is
+  not reproducible, and block 6 inside it is a factory bad block that only
+  NMBM can remap.  Losing it means that unit boots with a random MAC.
 
   NEVER erase the Bootloader or Factory partitions:
   Bootloader = the only thing that can start the board at all.
