@@ -402,14 +402,18 @@ fi
 # The MAC cell. Nothing else in the image can compensate if this is wrong:
 # with no hardcoded fallback left, a bad offset means every unit ships
 # with a random MAC.
-if grep -q '0x40004 0x6' "$DTB_DTS"; then
+# dtc zero-pads cell values when it decompiles ("0x06", not "0x6"), and the
+# padding width is not contractual, so match the value rather than a literal
+# rendering of it. An earlier revision grepped for '0x40004 0x6' and failed a
+# build whose DTB was entirely correct.
+if grep -Eq 'reg = <0x0*40004 0x0*6>' "$DTB_DTS"; then
     echo "  OK       : mac-base nvmem cell at 0x40004 (absolute 0xC0004)"
 else
-    echo "!!!! the compiled DTB has no mac-base cell at 0x40004."
+    echo "!!!! the compiled DTB has no mac-base cell covering 0x40004+6."
     echo "     HARDWARE_MAP.md records the factory base MAC at offset 0x4 of"
     echo "     the vendor Config partition (0xC0000); our Config starts at"
-    echo "     0x80000, so the cell must read 0x40004."
-    grep -n 'macaddr\|mac-base' "$DTB_DTS" | head -20
+    echo "     0x80000, so the cell must read <0x40004 0x6>."
+    grep -n -A4 'macaddr' "$DTB_DTS" | head -20
     exit 1
 fi
 

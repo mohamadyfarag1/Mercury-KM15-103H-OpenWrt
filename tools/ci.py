@@ -35,6 +35,28 @@ def _req(method, url, body=None, raw=False):
     except urllib.error.HTTPError as e:
         sys.exit(f"HTTP {e.code} on {method} {url}\n{e.read().decode(errors='replace')[:800]}")
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+def _fetch_log(job_id):
+    """Job logs 302 to Azure blob storage, which rejects any request still
+    carrying GitHub's Authorization header ("token was missing or malformed").
+    So take the redirect ourselves and fetch the blob with no auth."""
+    url = f"{API}/actions/jobs/{job_id}/logs"
+    req = urllib.request.Request(url, method="GET")
+    req.add_header("Authorization", f"Bearer {TOKEN}")
+    req.add_header("Accept", "application/vnd.github+json")
+    req.add_header("X-GitHub-Api-Version", "2022-11-28")
+    opener = urllib.request.build_opener(_NoRedirect)
+    try:
+        return opener.open(req, timeout=60).read().decode(errors="replace")
+    except urllib.error.HTTPError as e:
+        if e.code in (301, 302, 303, 307, 308) and e.headers.get("Location"):
+            plain = urllib.request.Request(e.headers["Location"], method="GET")
+            return urllib.request.urlopen(plain, timeout=120).read().decode(errors="replace")
+        sys.exit(f"HTTP {e.code} fetching logs for job {job_id}\n{e.read().decode(errors='replace')[:500]}")
+
 def latest_run():
     return _req("GET", f"{API}/actions/runs?per_page=1")["workflow_runs"][0]
 
@@ -58,7 +80,7 @@ def cmd_log(run_id=None):
     rid = run["id"]
     jobs = _req("GET", f"{API}/actions/runs/{rid}/jobs")["jobs"]
     job = next((j for j in jobs if j.get("conclusion") == "failure"), jobs[0])
-    raw = _req("GET", f"{API}/actions/jobs/{job['id']}/logs", raw=True).decode(errors="replace")
+    raw = _fetch_log(job["id"])
     markers = ("!!!!","ERROR:","Error 1","Error 2","failed to build","Collected errors",
                "make[","No rule to make","BUILD FAILED","CHAN5G","cannot","not found")
     hits = [ln for ln in raw.splitlines() if any(m in ln for m in markers)]
