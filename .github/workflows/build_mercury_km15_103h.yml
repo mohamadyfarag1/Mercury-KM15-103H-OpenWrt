@@ -68,7 +68,19 @@ jobs:
 
       - name: Clone OpenWrt Source
         run: |
-          git clone --depth 1 --branch v24.10.2 https://git.openwrt.org/openwrt/openwrt.git openwrt
+          # The "Cache OpenWrt downloads" step above restores into openwrt/dl,
+          # which creates the openwrt/ directory as a side effect on any cache
+          # hit (including a restore-keys prefix match). `git clone` refuses to
+          # clone into a non-empty directory, so clone into a temp dir and
+          # merge - this preserves the restored dl/ cache instead of wiping it.
+          if [ -d openwrt ] && [ -n "$(ls -A openwrt 2>/dev/null)" ]; then
+            echo "openwrt/ already exists (cache restore) - cloning to temp and merging"
+            git clone --depth 1 --branch v24.10.2 https://git.openwrt.org/openwrt/openwrt.git openwrt-clone-tmp
+            cp -a openwrt-clone-tmp/. openwrt/
+            rm -rf openwrt-clone-tmp
+          else
+            git clone --depth 1 --branch v24.10.2 https://git.openwrt.org/openwrt/openwrt.git openwrt
+          fi
           cd openwrt
           ./scripts/feeds update -a
           ./scripts/feeds install -a
