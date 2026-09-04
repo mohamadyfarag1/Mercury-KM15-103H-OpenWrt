@@ -6,11 +6,17 @@ set -e
 
 cd openwrt
 
-echo "Injecting dual-slot mercury.sh upgrade script..."
+echo "Injecting upgrade scripts..."
 mkdir -p package/base-files/files/lib/upgrade
 mkdir -p target/linux/ramips/base-files/lib/upgrade
 cp ../mercury_km15_103h_build/files/lib/upgrade/mercury.sh package/base-files/files/lib/upgrade/mercury.sh
 cp ../mercury_km15_103h_build/files/lib/upgrade/mercury.sh target/linux/ramips/base-files/lib/upgrade/mercury.sh
+# Our overlay platform.sh (files/) already takes precedence over the
+# target platform.sh at image-build time (mercury-04 copies files/*
+# into openwrt/files/ which wins). This explicit copy into the ramips
+# base-files as well makes the intent unambiguous and ensures it is
+# present even if the overlay copy ever gets missed.
+cp ../mercury_km15_103h_build/files/lib/upgrade/platform.sh target/linux/ramips/base-files/lib/upgrade/platform.sh
 
 # Patch target platform.sh for ramips
 PLATFORM_SH="target/linux/ramips/base-files/lib/upgrade/platform.sh"

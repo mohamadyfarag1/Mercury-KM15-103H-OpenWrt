@@ -395,6 +395,19 @@ mercury_do_upgrade() {
 		1) target_slot=2; target_part="firmware2" ;;
 		*) target_slot=1; target_part="firmware" ;;
 	esac
+
+	# Single-bank detection: if firmware2 does not exist in /proc/mtd
+	# (e.g. the DTS was built without it), override to always use the
+	# single "firmware" partition and always set Config slot to 1.
+	# This is safe: U-Boot still reads BOOT SIDE from Config, so slot 1
+	# always boots the only bank.  If that bank ever fails, recovery
+	# is via UART (CE# short) — acceptable for the extra ~44 MB of
+	# rootfs space gained by dropping the second bank.
+	if ! mercury_get_mtd_num "firmware2" >/dev/null 2>&1; then
+		echo "Mercury: No 'firmware2' partition found - single-bank mode."
+		target_slot=1
+		target_part="firmware"
+	fi
 	echo "Mercury: Target slot: $target_slot ($target_part)"
 
 	target_mtd_num=$(mercury_get_mtd_num "${target_part}")

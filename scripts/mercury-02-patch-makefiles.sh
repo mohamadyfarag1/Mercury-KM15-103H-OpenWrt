@@ -22,7 +22,7 @@ define Device/mercury_km15-103h
   # generated with the target defaults instead of this flash's real
   # erase/page size.
   $(Device/nand)
-  IMAGE_SIZE := 50331648
+  IMAGE_SIZE := 100663296
   DEVICE_VENDOR := Mercury
   DEVICE_MODEL := KM15-103H
   DEVICE_DTS := mt7621_mercury_km15-103h

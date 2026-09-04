@@ -382,27 +382,10 @@
           };
         };
       };
-      partition@180000 {
-        compatible = "denx,fit";
-        label = "firmware";
-        name = "partition";
-        reg = <0x180000 0x3000000>;
-      };
-      partition@3180000 {
-        compatible = "denx,fit";
-        label = "firmware2";
-        name = "partition";
-        reg = <0x3180000 0x3000000>;
-      };
-      partition@6180000 {
-        label = "Userdata";
-        name = "partition";
-        reg = <0x6180000 0x1680000>;
-      };
-      partition@c0000 {
+      partition@80000 {
         label = "Config";
         name = "partition";
-        reg = <0xc0000 0x40000>;
+        reg = <0x80000 0x80000>;
         nvmem-layout {
           #address-cells = <0x1>;
           #size-cells = <0x1>;
@@ -416,6 +399,32 @@
             reg = <0x4 0x6>;
           };
         };
+      };
+      partition@180000 {
+        label = "firmware";
+        name = "partition";
+        reg = <0x180000 0x6000000>;
+        partitions {
+          #address-cells = <0x1>;
+          #size-cells = <0x1>;
+          compatible = "fixed-partitions";
+          name = "partitions";
+          partition@0 {
+            label = "kernel";
+            name = "partition";
+            reg = <0x0 0x400000>;
+          };
+          partition@400000 {
+            label = "ubi";
+            name = "partition";
+            reg = <0x400000 0x5c00000>;
+          };
+        };
+      };
+      partition@6180000 {
+        label = "Userdata";
+        name = "partition";
+        reg = <0x6180000 0x1680000>;
       };
     };
   };
