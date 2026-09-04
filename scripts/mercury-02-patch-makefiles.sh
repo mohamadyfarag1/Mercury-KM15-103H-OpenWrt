@@ -27,7 +27,7 @@ define Device/mercury_km15-103h
   DEVICE_MODEL := KM15-103H
   DEVICE_DTS := mt7621_mercury_km15-103h
   SUPPORTED_DEVICES := mercury,km15-103h
-  DEVICE_PACKAGES := kmod-mt7915e mt7915-firmware uboot-envtools luci luci-ssl iwinfo wireless-regdb irqbalance
+  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7915-firmware uboot-envtools luci luci-ssl iwinfo wireless-regdb irqbalance
   # This board's U-Boot boots a FIT image: both firmware banks are
   # declared compatible = "denx,fit" in the DTS, and the bootloader
   # verifies the FIT's crc32+sha1 before jumping. The ramips default

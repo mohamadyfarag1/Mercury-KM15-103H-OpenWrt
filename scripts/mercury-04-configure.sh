@@ -24,7 +24,7 @@ CONFIG_TARGET_ramips_mt7621_DEVICE_mercury_km15-103h=y
 
 # Wireless Drivers & Firmware
 CONFIG_PACKAGE_kmod-mt7915e=y
-CONFIG_PACKAGE_mt7915-firmware=y
+CONFIG_PACKAGE_kmod-mt7915-firmware=y
 CONFIG_PACKAGE_kmod-mt76=y
 CONFIG_PACKAGE_kmod-mt76-connac=y
 CONFIG_PACKAGE_kmod-mt76-core=y
@@ -59,15 +59,17 @@ CONFIG_TARGET_ROOTFS_SQUASHFS=y
 CONFIG_TARGET_ROOTFS_UBIFS=y
 CONFIG_TARGET_UBIFS_COMPRESSION_ZSTD=y
 
-# Initramfs image for UART Ymodem recovery boot.
-# When CE# is shorted on the NAND, SPL enters Ymodem mode.
-# Send u-boot.bin first, then use 'loady 0x84000000' + 'bootm'
-# to load this initramfs image into RAM. OpenWrt runs from RAM,
-# allowing 'sysupgrade -n' to write to NAND without anything mounted.
-# NOTE: the correct OpenWrt symbol is TARGET_ROOTFS_INITRAMFS - it is
-# what emits *-initramfs-kernel.bin. CONFIG_TARGET_RAMDISK is a kernel
-# Kconfig name, not an OpenWrt image symbol, and defconfig drops it,
-# so no initramfs image was produced (Step 9.7 would only have warned).
+# Initramfs image for UART Ymodem recovery / first install.
+# Shorting NAND pin 9 (#CE) makes SPL fall back to Ymodem; send the
+# vendor bootloader dumped from mtd0, then from the U-Boot prompt:
+#   loady 0x84000000  -> send *-initramfs-uImage.itb -> bootm 0x84000000
+# OpenWrt then runs entirely from RAM, so 'sysupgrade -n' can write NAND
+# with no partition mounted.
+# NOTE: the correct OpenWrt symbol is TARGET_ROOTFS_INITRAMFS, and it is
+# what makes the image get built at all. CONFIG_TARGET_RAMDISK, used here
+# earlier, is a kernel Kconfig name rather than an OpenWrt image symbol,
+# so defconfig discarded it and no RAM image was ever produced. The .itb
+# filename itself comes from KERNEL_INITRAMFS_SUFFIX in mercury-02.
 CONFIG_TARGET_ROOTFS_INITRAMFS=y
 
 # NOTE: there is deliberately no U-Boot package here. OpenWrt v24.10.2
@@ -133,7 +135,7 @@ echo "Auditing which options survived defconfig..."
 # Dropping any of these produces a firmware that is broken on the device,
 # so they abort the build rather than ship a hole.
 CRITICAL="CONFIG_PACKAGE_kmod-mt7915e \
-CONFIG_PACKAGE_mt7915-firmware \
+CONFIG_PACKAGE_kmod-mt7915-firmware \
 CONFIG_PACKAGE_ubi-utils \
 CONFIG_PACKAGE_mtd \
 CONFIG_PACKAGE_wireless-regdb \
@@ -182,7 +184,7 @@ fi
 # rests on being able to boot OpenWrt from RAM, so make its absence loud.
 if ! grep -q '^CONFIG_TARGET_ROOTFS_INITRAMFS=y' .config; then
 	echo ""
-	echo "⚠️  WARNING: TARGET_ROOTFS_INITRAMFS was dropped - no *-initramfs-kernel.bin"
+	echo "⚠️  WARNING: TARGET_ROOTFS_INITRAMFS was dropped - no *-initramfs-uImage.itb"
 	echo "    will be produced, so the UART Ymodem 'boot OpenWrt from RAM' recovery"
 	echo "    path is unavailable and the only install route is sysupgrade."
 fi
