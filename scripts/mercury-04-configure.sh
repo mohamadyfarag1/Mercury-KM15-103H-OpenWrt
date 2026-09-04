@@ -180,6 +180,47 @@ if [ -n "$MISSING" ]; then
 	exit 1
 fi
 
+# ---------------------------------------------------------------
+# The NAND driver and the bad-block remapping layer are what make this
+# board readable at all: block 6 (0xC0000) is a factory bad block, and
+# it holds the per-unit factory MAC at 0xC0004. Without the remapping
+# layer that read returns an uncorrectable ECC error, every MAC falls
+# back to a zero base, and the radios come up as 00:00:00:00:00:0x.
+#
+# These live in the ramips/mt7621 target kernel config, not in .config,
+# so defconfig cannot report on them. Note the symbol names: OpenWrt has
+# no CONFIG_MTD_NMBM/CONFIG_NMBM - those are MediaTek SDK names. Upstream
+# ships NMBM *inside* the mtk_bmt module, selected by the `mediatek,nmbm`
+# property our DTS sets, so MTK_BMT is the symbol that actually matters.
+# ---------------------------------------------------------------
+echo ""
+echo "Verifying NAND + bad-block remapping support in the target kernel config..."
+KCFG=$(ls target/linux/ramips/mt7621/config-* 2>/dev/null | head -1)
+if [ -z "$KCFG" ]; then
+	echo "❌ ERROR: no target/linux/ramips/mt7621/config-* found."
+	exit 1
+fi
+echo "  using $KCFG"
+NAND_MISSING=""
+for SYM in CONFIG_MTD_NAND_MT7621 CONFIG_MTD_NAND_MTK_BMT; do
+	if grep -q "^${SYM}=y" "$KCFG"; then
+		echo "  OK       : $SYM"
+	else
+		echo "  MISSING  : $SYM   <-- CRITICAL"
+		NAND_MISSING="$NAND_MISSING $SYM"
+	fi
+done
+if [ -n "$NAND_MISSING" ]; then
+	echo ""
+	echo "❌ ERROR: the target kernel config lacks:$NAND_MISSING"
+	echo "   MT7621 = the NAND flash controller driver (hardware BCH ECC via"
+	echo "   the 'ecc' reg range in our DTS). MTK_BMT = the bad-block layer"
+	echo "   that provides NMBM. Building without them yields firmware that"
+	echo "   cannot read the factory MAC and may not mount UBI at all."
+	grep -n 'MTK_BMT\|NAND_MT7621\|NMBM' "$KCFG" || echo "(no related symbols in this config)"
+	exit 1
+fi
+
 # Not fatal on its own, but the whole first-install / brick-recovery plan
 # rests on being able to boot OpenWrt from RAM, so make its absence loud.
 if ! grep -q '^CONFIG_TARGET_ROOTFS_INITRAMFS=y' .config; then
