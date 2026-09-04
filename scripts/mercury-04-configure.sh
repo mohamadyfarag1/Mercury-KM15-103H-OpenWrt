@@ -64,7 +64,11 @@ CONFIG_TARGET_UBIFS_COMPRESSION_ZSTD=y
 # Send u-boot.bin first, then use 'loady 0x84000000' + 'bootm'
 # to load this initramfs image into RAM. OpenWrt runs from RAM,
 # allowing 'sysupgrade -n' to write to NAND without anything mounted.
-CONFIG_TARGET_RAMDISK=y
+# NOTE: the correct OpenWrt symbol is TARGET_ROOTFS_INITRAMFS - it is
+# what emits *-initramfs-kernel.bin. CONFIG_TARGET_RAMDISK is a kernel
+# Kconfig name, not an OpenWrt image symbol, and defconfig drops it,
+# so no initramfs image was produced (Step 9.7 would only have warned).
+CONFIG_TARGET_ROOTFS_INITRAMFS=y
 
 # Build the U-Boot binary so it can be sent via Ymodem to the SPL.
 # Binary ends up in build_dir as u-boot-mt7621/u-boot.bin.

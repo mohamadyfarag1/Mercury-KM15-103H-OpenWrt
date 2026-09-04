@@ -68,9 +68,29 @@ if [ ! -s "$CTPATCH" ]; then
 fi
 echo "Patch: $CTPATCH  ($(wc -l < "$CTPATCH") lines)"
 
-# Clean so mt76 is rebuilt with the patch applied, not from the
-# already-prepared (unpatched) tree.
+# Force mt76 to be re-extracted AND re-patched on the next build.
+#
+# `make package/kernel/mt76/clean` for a KERNEL package only removes the
+# install stamps (.mt76_installed, mt76.list) - it leaves the extracted
+# source tree and its ".prepared_<hash>" stamp in place. With that stamp
+# present, the full build in Step 5 SKIPS the Prepare (extract+patch)
+# phase entirely, so the just-generated 999 patch is never applied and
+# the driver ships the stock 28-channel table (this is exactly the
+# "patch did not reach this build" failure seen on run 7f446af).
+#
+# Deleting the prepared source dir removes that stamp, so the next `make`
+# re-extracts mt76 from the tarball and applies every patch in patches/
+# in order - including 999-mercury-superchannels.patch, which is a diff
+# against the fully-prepared tree and therefore applies cleanly as the
+# last patch.
 make package/kernel/mt76/clean V=s 2>&1 | tail -5
+echo "Forcing mt76 re-extract by removing the prepared source dir(s):"
+rm -rfv build_dir/target-*/linux-*/mt76-* 2>/dev/null | tail -3
+if ls build_dir/target-*/linux-*/mt76-* >/dev/null 2>&1; then
+    echo "!!!! mt76 source dir still present after removal - re-patch may be skipped."
+    exit 1
+fi
+echo "OK: mt76 prepared source removed; Step 5 will re-extract and apply 999."
 
 # ---------------------------------------------------------------
 # Step 4: Apply kernel regulatory bypass patches.
