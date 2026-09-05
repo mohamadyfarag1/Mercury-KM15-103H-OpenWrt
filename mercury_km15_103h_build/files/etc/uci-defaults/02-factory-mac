@@ -1,5 +1,5 @@
 #!/bin/sh
-# Set factory MAC addresses dynamically on first boot.
+# Set factory MAC addresses dynamically on first boot for LAN and WAN.
 . /lib/functions.sh
 . /lib/functions/system.sh
 
@@ -16,17 +16,12 @@ esac
 
 WAN_MAC="$BASE_MAC"
 LAN_MAC=$(macaddr_add "$BASE_MAC" 1)
-WIFI24_MAC=$(macaddr_add "$BASE_MAC" 2)
-WIFI5_MAC=$(macaddr_add "$BASE_MAC" 3)
 
 uci -q batch <<EOF
 set network.@device[0].macaddr='$LAN_MAC'
 set network.wan.macaddr='$WAN_MAC'
-set wireless.default_radio0.macaddr='$WIFI24_MAC'
-set wireless.default_radio1.macaddr='$WIFI5_MAC'
 commit network
-commit wireless
 EOF
 
-logger -t factory-mac "Applied factory MACs: WAN=$WAN_MAC, LAN=$LAN_MAC, 2.4G=$WIFI24_MAC, 5G=$WIFI5_MAC"
+logger -t factory-mac "Applied factory MACs: WAN=$WAN_MAC, LAN=$LAN_MAC"
 exit 0
