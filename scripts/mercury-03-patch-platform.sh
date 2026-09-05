@@ -62,6 +62,12 @@ with open(path, "r", encoding="utf-8") as f:
 entry = """\tmercury,km15-103h)
 \t\tlocal wan_mac lan_mac
 \t\twan_mac=\\$(mtd_get_mac_binary Config 0x4)
+\t\tif [ -z "\\$wan_mac" ] || [ "\\$wan_mac" = "00:00:00:00:00:00" ] || [ "\\$wan_mac" = "ff:ff:ff:ff:ff:ff" ]; then
+\t\t\twan_mac=\\$(mtd_get_mac_binary Config 0x20004)
+\t\tfi
+\t\tif [ -z "\\$wan_mac" ] || [ "\\$wan_mac" = "00:00:00:00:00:00" ] || [ "\\$wan_mac" = "ff:ff:ff:ff:ff:ff" ]; then
+\t\t\twan_mac=\\$(mtd_get_mac_binary Factory 0x4)
+\t\tfi
 \t\tif [ -n "\\$wan_mac" ]; then
 \t\t\tlan_mac=\\$(macaddr_add "\\$wan_mac" 1)
 \t\t\tucidef_set_interface_macaddr "lan" "\\$lan_mac"
