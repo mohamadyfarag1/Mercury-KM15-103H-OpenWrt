@@ -81,12 +81,12 @@ text = re.sub(r'NL80211_RRF_NO_IR', '0', text)
 text = re.sub(r'NL80211_RRF_NO_OFDM', '0', text)
 text = re.sub(r'NL80211_RRF_DFS', '0', text)
 
-# Widen built-in world_regdom to full 5115-5935 @ 160MHz 30dBm and 2182-2494 @ 40MHz 30dBm
+# Widen built-in world_regdom to full 4910-5935 @ 160MHz 30dBm and 2182-2494 @ 40MHz 30dBm
 new_world_rules = """static const struct ieee80211_regdomain world_regdom = {
 \t.alpha2 = "00",
 \t.reg_rules = {
 \t\tREG_RULE(2182 - 10, 2494 + 10, 40, 0, 30, 0),
-\t\tREG_RULE(5115 - 10, 5935 + 10, 160, 0, 30, 0),
+\t\tREG_RULE(4910 - 10, 5935 + 10, 160, 0, 30, 0),
 \t},
 };"""
 

@@ -22,3 +22,4 @@ mercury_km15_103h_build/**  text eol=lf
 # relying on -text alone.
 *.bin -text !eol
 *.dtb -text !eol
+*.gz -text !eol

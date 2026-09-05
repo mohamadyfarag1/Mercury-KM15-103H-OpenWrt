@@ -49,13 +49,21 @@ import os
 import re
 import sys
 
+def freq_5g(ch):
+    if 182 <= ch <= 196:
+        return 4000 + ch * 5
+    return 5000 + ch * 5
+
+
 # ---------------------------------------------------------------------
 # 5 GHz: continuous 5 MHz spacing superchannel plan (same as Horus/Ubiquiti AC).
-# 5 GHz channel N sits at 5000 + N*5 MHz.
-#   range(24, 186) -> channels 24..185 (5120 MHz to 5925 MHz)
-# Total: 162 continuous 5 GHz channels.
+# 5 GHz channel N sits at 5000 + N*5 MHz, plus IEEE 802.11j channels
+# 182..196 for the 4.9 GHz band at 4000 + N*5 MHz (4910-4980 MHz).
+#   range(182, 197) -> channels 182..196 (4910 MHz to 4980 MHz, 15 ch)
+#   range(0, 182)   -> channels 0..181   (5000 MHz to 5905 MHz, 182 ch)
+# Total: 197 continuous 5 GHz channels.
 # ---------------------------------------------------------------------
-CHANS_5G = list(range(24, 186))
+CHANS_5G = sorted(list(range(182, 197)) + list(range(0, 182)), key=freq_5g)
 
 # ---------------------------------------------------------------------
 # 2.3 GHz: 2 GHz channel N sits at 2407 + N*5 MHz, so sub-2.4 GHz
@@ -75,10 +83,6 @@ PATCH_REL = os.path.join('patches', '999-mercury-superchannels.patch')
 # definition CHAN5G(_idx, _freq), because those args are identifiers.
 ENTRY_RE_5G = re.compile(r'CHAN5G\(\s*-?\d+\s*,\s*\d+\s*\)')
 ENTRY_RE_2G = re.compile(r'CHAN2G\(\s*-?\d+\s*,\s*\d+\s*\)')
-
-
-def freq_5g(ch):
-    return 5000 + ch * 5
 
 
 def freq_2g(ch):

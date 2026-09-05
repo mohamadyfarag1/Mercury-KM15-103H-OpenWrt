@@ -3,4 +3,6 @@
 /rootfs.bin
 /uboot_ram.bin
 wireless_patched.js
+kernel_backup_fit.bin
+kernel_patched.bin
 __pycache__/

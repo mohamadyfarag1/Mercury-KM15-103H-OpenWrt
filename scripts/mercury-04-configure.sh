@@ -17,6 +17,20 @@ find files/etc/init.d -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/etc/uci-defaults -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/lib -type f -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
 
+# Guarantee pre-compressed wireless.js.gz exists in overlay
+if [ -f files/www/luci-static/resources/view/network/wireless.js ]; then
+    gzip -9kf files/www/luci-static/resources/view/network/wireless.js 2>/dev/null || true
+fi
+
+# Inject patched LuCI wireless.js into feeds/luci source tree
+LUCI_NET_DIR="feeds/luci/modules/luci-mod-network/htdocs/luci-static/resources/view/network"
+if [ -d "$LUCI_NET_DIR" ]; then
+    echo "Injecting safe bandwidth-filtering wireless.js into feeds/luci..."
+    cp -f files/www/luci-static/resources/view/network/wireless.js "$LUCI_NET_DIR/wireless.js"
+    [ -f files/www/luci-static/resources/view/network/wireless.js.gz ] && \
+        cp -f files/www/luci-static/resources/view/network/wireless.js.gz "$LUCI_NET_DIR/wireless.js.gz" 2>/dev/null || true
+fi
+
 echo "Writing target .config for Mercury KM15-103H..."
 cat << 'EOF' > .config
 # Target System
