@@ -68,6 +68,29 @@ if [ ! -s "$CTPATCH" ]; then
 fi
 echo "Patch: $CTPATCH  ($(wc -l < "$CTPATCH") lines)"
 
+# ---------------------------------------------------------------
+# Step 3b: Patch mt7915/init.c to enable HE160 in DBDC mode.
+#
+# MT7915E (single-chip DBDC) supports 160 MHz on 5 GHz even when
+# 2.4 GHz is simultaneously active, but the upstream driver guards
+# HE160 capability advertisement with !dev->dbdc_support.  Remove
+# that guard so the kernel sees HE160 as a valid channel width.
+#
+# This script is NOT fatal: if the pattern is absent (code layout
+# changed upstream) it prints a warning and continues, letting the
+# superchannel table patch carry the build.
+# ---------------------------------------------------------------
+echo "======================================="
+echo "Step 3b: Patching mt7915 HE160 DBDC restriction..."
+echo "======================================="
+python3 ../scripts/gen_mt7915_he160_patch.py build_dir
+HE160PATCH="package/kernel/mt76/patches/998-mt7915-he160-dbdc.patch"
+if [ -s "$HE160PATCH" ]; then
+    echo "Patch: $HE160PATCH  ($(wc -l < "$HE160PATCH") lines)"
+else
+    echo "NOTE: HE160 patch not generated (non-fatal; driver may already be OK or pattern changed)."
+fi
+
 # Force mt76 to be re-extracted AND re-patched on the next build.
 #
 # `make package/kernel/mt76/clean` for a KERNEL package only removes the
