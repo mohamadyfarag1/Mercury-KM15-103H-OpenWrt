@@ -52,12 +52,13 @@ with open('db.txt', 'w') as f:
     for c in countries:
         f.write('country %s:\n' % c)
         f.write('\t(2182 - 2494 @ 40), (33)\n')
-        f.write('\t(5115 - 5930 @ 160), (33)\n')
+        f.write('\t(5115 - 5935 @ 160), (33)\n')
         f.write('\n')
 print('Generated db.txt with %d countries' % len(countries))
 PYEOF
 
 openssl ecparam -name prime256v1 -genkey -noout -out key.priv.pem
+openssl ec -in key.priv.pem -pubout -out key.pub.pem 2>/dev/null || true
 make || echo "WARNING: regulatory.db build had non-zero exit - checking output..."
 
 if [ ! -f regulatory.db ]; then
@@ -67,5 +68,6 @@ fi
 
 mkdir -p ../openwrt/files/lib/firmware
 cp regulatory.db ../openwrt/files/lib/firmware/regulatory.db
+[ -f regulatory.db.p7s ] && cp regulatory.db.p7s ../openwrt/files/lib/firmware/regulatory.db.p7s
 echo "Injected $(wc -c < ../openwrt/files/lib/firmware/regulatory.db) byte custom regulatory.db"
 echo "✅ Regulatory database ready."

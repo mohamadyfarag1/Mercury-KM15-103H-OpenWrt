@@ -1,1 +1,6 @@
 .github/KM15-103H-/
+/kernel.bin
+/rootfs.bin
+/uboot_ram.bin
+wireless_patched.js
+__pycache__/

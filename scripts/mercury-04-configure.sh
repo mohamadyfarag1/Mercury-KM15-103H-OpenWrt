@@ -15,6 +15,7 @@ find files/usr/bin -type f -exec chmod +x {} \;
 find files/usr/sbin -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/etc/init.d -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/etc/uci-defaults -type f -exec chmod +x {} \; 2>/dev/null || true
+find files/lib -type f -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
 
 echo "Writing target .config for Mercury KM15-103H..."
 cat << 'EOF' > .config
@@ -30,6 +31,7 @@ CONFIG_PACKAGE_kmod-mt76=y
 CONFIG_PACKAGE_kmod-mt76-connac=y
 CONFIG_PACKAGE_kmod-mt76-core=y
 CONFIG_PACKAGE_wireless-regdb=y
+CONFIG_PACKAGE_wpad-mbedtls=y
 
 # Web Interface & Management
 CONFIG_PACKAGE_luci=y
@@ -202,6 +204,8 @@ if [ -z "$KCFG" ]; then
 	exit 1
 fi
 echo "  using $KCFG"
+# Ensure custom regulatory database is unconditionally accepted by disabling signature enforcement
+sed -i 's/CONFIG_CFG80211_REQUIRE_SIGNED_REGDB=y/# CONFIG_CFG80211_REQUIRE_SIGNED_REGDB is not set/' "$KCFG" 2>/dev/null || true
 NAND_MISSING=""
 for SYM in CONFIG_MTD_NAND_MT7621 CONFIG_MTD_NAND_MTK_BMT; do
 	if grep -q "^${SYM}=y" "$KCFG"; then

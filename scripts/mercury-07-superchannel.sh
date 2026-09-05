@@ -65,33 +65,45 @@ for REG in $(find . -path "*/net/wireless/reg.c" 2>/dev/null); do
     echo "[PATCH 1] $REG"
     BEFORE=$(md5sum "$REG" | cut -d' ' -f1)
 
-    # 2.4 GHz world domain -> 2182-2484 MHz at 33 dBm
-    sed -i 's/REG_RULE(2412-10, 2462+10, 40, 6, 20, 0)/REG_RULE(2182-10, 2484+10, 40, 6, 33, 0)/g' "$REG"
-    sed -i 's/REG_RULE(2467-10, 2472+10, 20, 6, 20,/REG_RULE(2182-10, 2484+10, 40, 6, 33,/g'      "$REG"
-    sed -i 's/REG_RULE(2484-10, 2484+10, 20, 6, 20,/REG_RULE(2484-10, 2484+10, 40, 6, 33,/g'      "$REG"
+    # Replace world_regdom and strip all restriction flags (NO_IR, DFS, AUTO_BW, NO_OFDM)
+    if python3 - "$REG" <<'PYEOF'
+import sys, re
 
-    # 5 GHz world domain -> 5115-5930 MHz at 160 MHz / 33 dBm
-    sed -i 's/REG_RULE(5150-10, 5350+10, 80, 0, 30,/REG_RULE(5115-10, 5930+10, 160, 0, 33,/g' "$REG"
-    sed -i 's/REG_RULE(5470-10, 5850+10, 80, 0, 30,/REG_RULE(5115-10, 5930+10, 160, 0, 33,/g' "$REG"
-    sed -i 's/REG_RULE(5725-10, 5850+10, 80, 0, 30,/REG_RULE(5115-10, 5930+10, 160, 0, 33,/g' "$REG"
+path = sys.argv[1]
+with open(path, 'r', encoding='utf-8', errors='ignore') as fh:
+    text = fh.read()
 
-    # Clear restriction flags. Substituting the token with 0 is safe in
-    # both contexts it appears in: a flags initialiser (0 | X) and a
-    # test (flags & 0), which is exactly the "never restricted" result
-    # we want.
-    sed -i 's/NL80211_RRF_NO_IR | NL80211_RRF_AUTO_BW/0/g' "$REG"
-    sed -i 's/NL80211_RRF_NO_IR/0/g'   "$REG"
-    sed -i 's/NL80211_RRF_NO_OFDM/0/g' "$REG"
+before = text
 
-    AFTER=$(md5sum "$REG" | cut -d' ' -f1)
-    if [ "$BEFORE" = "$AFTER" ]; then
-        echo "  NOTE: no substitution matched in this file."
-        echo "        Either it was already patched, or upstream reformatted"
-        echo "        the REG_RULE lines. The world-domain rules present are:"
-        grep -n 'REG_RULE(' "$REG" | head -n 12 | sed 's/^/          /'
-        echo "        Not fatal: the custom regulatory.db is the primary path."
-    else
-        echo "  -> patched"
+# Strip restriction flags everywhere in reg.c
+text = re.sub(r'NL80211_RRF_NO_IR\s*\|\s*NL80211_RRF_AUTO_BW', '0', text)
+text = re.sub(r'NL80211_RRF_NO_IR', '0', text)
+text = re.sub(r'NL80211_RRF_NO_OFDM', '0', text)
+text = re.sub(r'NL80211_RRF_DFS', '0', text)
+
+# Widen built-in world_regdom to full 5115-5935 @ 160MHz 30dBm and 2182-2494 @ 40MHz 30dBm
+new_world_rules = """static const struct ieee80211_regdomain world_regdom = {
+\t.alpha2 = "00",
+\t.reg_rules = {
+\t\tREG_RULE(2182 - 10, 2494 + 10, 40, 0, 30, 0),
+\t\tREG_RULE(5115 - 10, 5935 + 10, 160, 0, 30, 0),
+\t},
+};"""
+
+world_pat = re.compile(r'static\s+const\s+struct\s+ieee80211_regdomain\s+world_regdom\s*=\s*\{.*?\};', re.DOTALL)
+if world_pat.search(text):
+    text = world_pat.sub(new_world_rules, text)
+
+if text != before:
+    with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+        fh.write(text)
+    print("  -> patched world_regdom and cleared NO_IR/DFS flags")
+    sys.exit(0)
+else:
+    print("  -> already patched or no match")
+    sys.exit(1)
+PYEOF
+    then
         HITS_TOTAL=$((HITS_TOTAL + 1))
     fi
 done
@@ -122,7 +134,7 @@ fi
 # literal 't', producing "t<TAB>chan = ..." - which is not
 # valid C and fails the build. Verified, not assumed.
 # --------------------------------------------------------
-if [ "$ENABLE_23G" = "1" ] || [ "$ENABLE_23G" = "yes" ] || [ "$ENABLE_23G" = "true" ]; then
+if [ "$ENABLE_23G" != "0" ] && [ "$ENABLE_23G" != "false" ] && [ "$ENABLE_23G" != "no" ]; then
     echo "[PATCH 2] net/wireless/util.c  (2.3 GHz enabled)"
     for UTIL in $(find . -path "*/net/wireless/util.c" 2>/dev/null); do
         python3 - "$UTIL" <<'PYEOF'

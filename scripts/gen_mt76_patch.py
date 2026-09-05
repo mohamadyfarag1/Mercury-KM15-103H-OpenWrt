@@ -50,14 +50,12 @@ import re
 import sys
 
 # ---------------------------------------------------------------------
-# 5 GHz: same channel plan as Horus/ath10k.
+# 5 GHz: continuous 5 MHz spacing superchannel plan (same as Horus/Ubiquiti AC).
 # 5 GHz channel N sits at 5000 + N*5 MHz.
-#   range(36, 147, 2)  -> 36, 38 ... 146   (56 ch, UNII-1..UNII-2e)
-#   range(149, 166, 2) -> 149, 151 ... 165 ( 9 ch, UNII-3)
-#   [169, 173, 177]                        ( 3 ch, UNII-4 / extended)
-# Total 68.
+#   range(24, 186) -> channels 24..185 (5120 MHz to 5925 MHz)
+# Total: 162 continuous 5 GHz channels.
 # ---------------------------------------------------------------------
-CHANS_5G = list(range(36, 147, 2)) + list(range(149, 166, 2)) + [169, 173, 177]
+CHANS_5G = list(range(24, 186))
 
 # ---------------------------------------------------------------------
 # 2.3 GHz: 2 GHz channel N sits at 2407 + N*5 MHz, so sub-2.4 GHz
@@ -68,7 +66,7 @@ CHANS_5G = list(range(36, 147, 2)) + list(range(149, 166, 2)) + [169, 173, 177]
 # ---------------------------------------------------------------------
 CHANS_23G = list(range(-19, 0))          # -19 .. -1  => 2312 .. 2402 MHz
 
-ENABLE_23G = os.environ.get('MERCURY_ENABLE_23GHZ', '').strip() in ('1', 'yes', 'true')
+ENABLE_23G = os.environ.get('MERCURY_ENABLE_23GHZ', '').strip().lower() not in ('0', 'no', 'false', 'disable')
 
 PKG_DIR = 'package/kernel/mt76'
 PATCH_REL = os.path.join('patches', '999-mercury-superchannels.patch')
@@ -224,7 +222,7 @@ def main():
     os.makedirs(os.path.dirname(patch_path), exist_ok=True)
     with open(patch_path, 'w', encoding='utf-8', newline='\n') as fh:
         fh.write('# Mercury KM15-103H superchannel table\n')
-        fh.write('# 5 GHz : %d channels, %d-%d MHz (10 MHz spacing)\n'
+        fh.write('# 5 GHz : %d channels, %d-%d MHz (5 MHz spacing)\n'
                  % (len(CHANS_5G), freq_5g(CHANS_5G[0]), freq_5g(CHANS_5G[-1])))
         if chans_2g is not None:
             fh.write('# 2.3GHz: %d channels, %d-%d MHz (EXPERIMENTAL, unverified on hardware)\n'
