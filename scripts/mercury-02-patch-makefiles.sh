@@ -35,6 +35,13 @@ define Device/mercury_km15-103h
   # previously did) produced a legacy uImage the bootloader will not
   # accept - a firmware that builds and flashes cleanly and then does
   # not boot. Build a real FIT instead.
+  #
+  # CRITICAL: U-Boot hardcodes loading the FIT image to 0x80010000.
+  # If KERNEL_LOADADDR is left at the ramips default (0x80001000),
+  # LZMA decompression collides with the FIT buffer at 0x80010000
+  # causing "lzma compressed: uncompress error 1" and immediate reboot.
+  # Setting KERNEL_LOADADDR to 0x82000000 avoids any memory overlap.
+  KERNEL_LOADADDR := 0x82000000
   KERNEL := kernel-bin | lzma | fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb
   # Same FIT for the RAM-boot image, so U-Boot can 'bootm' it directly.
   KERNEL_INITRAMFS := $$(KERNEL)
