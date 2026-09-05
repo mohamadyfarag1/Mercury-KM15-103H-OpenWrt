@@ -290,107 +290,30 @@ mercury_switch_boot_slot() {
 	local target_slot="$2"
 	local backup_file="/tmp/config_backup.bin"
 	local modified_file="/tmp/config_modified.bin"
-	local verify_byte mac_hex
 
-	# Config partition spans NAND 0x0C0000-0x100000 (256 KB = 2 blocks).
-	# Base MAC address is stored at offset 0x4 (and backup copy at 0x20004).
-	# Boot slot bytes are at offset 10 (0xA) and 131082 (0x2000A).
-	if [ "$(dd if="$config_mtd" bs=1 skip=10 count=1 2>/dev/null | hexdump -e '"%d"')" = "$target_slot" ] &&
-	   [ "$(dd if="$config_mtd" bs=1 skip=131082 count=1 2>/dev/null | hexdump -e '"%d"')" = "$target_slot" ]; then
+	if ! grep -q '"firmware2"' /proc/mtd 2>/dev/null; then
+		echo "Mercury: Single-bank mode detected, bypassing Config modification completely."
+		return 0
+	fi
+
+	if [ "$(dd if="$config_mtd" bs=1 skip=10 count=1 2>/dev/null | hexdump -e '"%d"')" = "$target_slot" ]; then
 		echo "Mercury: Boot slot already $target_slot - leaving Config untouched."
 		return 0
 	fi
 
-	echo "Mercury: Switching boot slot to $target_slot"
-
 	echo "Mercury: Backing up Config partition..."
-	dd if="$config_mtd" of="$backup_file" bs=64k 2>/dev/null
-	if [ ! -f "$backup_file" ]; then
-		echo "Mercury: ERROR - Failed to backup Config partition"
-		return 1
-	fi
-
-	# If the backup did not capture a plausible MAC, refuse rather than
-	# destroy unrecoverable factory data.
-	mac_hex=$(dd if="$backup_file" bs=1 skip=4 count=6 2>/dev/null | hexdump -v -e '6/1 "%02x"')
-	case "$mac_hex" in
-		"" | 000000000000 | ffffffffffff)
-			echo "Mercury: ERROR - Config backup has no valid MAC at 0x4 (read '$mac_hex')."
-			echo "Mercury: Refusing to erase Config - that would destroy the factory MAC."
-			rm -f "$backup_file"
-			return 1
-			;;
-	esac
-	echo "Mercury: Config backup OK (factory MAC $mac_hex preserved)"
-
+	dd if="$config_mtd" of="$backup_file" 2>/dev/null
 	cp "$backup_file" "$modified_file"
-	if [ ! -f "$modified_file" ]; then
-		echo "Mercury: ERROR - Failed to create working copy"
-		rm -f "$backup_file"
-		return 1
-	fi
 
-	printf "\\x0${target_slot}" | dd of="$modified_file" bs=1 seek=10 count=1 conv=notrunc 2>/dev/null
+	printf "%b" " $(printf '%03o' $target_slot)" | dd of="$modified_file" bs=1 seek=10 conv=notrunc 2>/dev/null
+	printf "%b" " $(printf '%03o' $target_slot)" | dd of="$modified_file" bs=1 seek=131082 conv=notrunc 2>/dev/null
 
-	printf "\\x0${target_slot}" | dd of="$modified_file" bs=1 seek=131082 count=1 conv=notrunc 2>/dev/null
-
-	verify_byte=$(dd if="$modified_file" bs=1 skip=10 count=1 2>/dev/null | hexdump -e '"%d"')
-	if [ "$verify_byte" != "$target_slot" ]; then
-		echo "Mercury: ERROR - RAM modification verification failed at 0xA (expected $target_slot, got $verify_byte)"
-		rm -f "$backup_file" "$modified_file"
-		return 1
-	fi
-	echo "Mercury: RAM verification passed at 0xA (slot=$verify_byte)"
-
-	verify_byte=$(dd if="$modified_file" bs=1 skip=131082 count=1 2>/dev/null | hexdump -e '"%d"')
-	if [ "$verify_byte" != "$target_slot" ]; then
-		echo "Mercury: ERROR - RAM modification verification failed at 0x2000A (expected $target_slot, got $verify_byte)"
-		rm -f "$backup_file" "$modified_file"
-		return 1
-	fi
-	echo "Mercury: RAM verification passed at 0x2000A (slot=$verify_byte)"
-
-	echo "Mercury: Erasing Config partition..."
-	if ! mtd erase "$config_mtd" 2>/dev/null; then
-		echo "Mercury: ERROR - Failed to erase Config partition"
-		rm -f "$backup_file" "$modified_file"
-		return 1
-	fi
-
-	echo "Mercury: Writing modified Config partition..."
-	if ! dd if="$modified_file" of="$config_mtd" bs=64k 2>/dev/null; then
+	echo "Mercury: Writing modified Config partition safely using mtd..."
+	if ! mtd write "$modified_file" Config; then
 		echo "Mercury: ERROR - Failed to write Config partition"
-		echo "Mercury: CRITICAL - Attempting recovery from backup..."
-		mtd erase "$config_mtd" 2>/dev/null
-		dd if="$backup_file" of="$config_mtd" bs=64k 2>/dev/null
-		rm -f "$backup_file" "$modified_file"
+		mtd write "$backup_file" Config
 		return 1
 	fi
-
-	verify_byte=$(dd if="$config_mtd" bs=1 skip=10 count=1 2>/dev/null | hexdump -e '"%d"')
-	if [ "$verify_byte" != "$target_slot" ]; then
-		echo "Mercury: ERROR - Flash verification failed at 0xA (expected $target_slot, got $verify_byte)"
-		echo "Mercury: CRITICAL - Attempting recovery from backup..."
-		flash_erase "$config_mtd" 0 0 2>/dev/null
-		dd if="$backup_file" of="$config_mtd" bs=64k 2>/dev/null
-		rm -f "$backup_file" "$modified_file"
-		return 1
-	fi
-	echo "Mercury: Flash verification passed at 0xA (slot=$verify_byte)"
-
-	verify_byte=$(dd if="$config_mtd" bs=1 skip=131082 count=1 2>/dev/null | hexdump -e '"%d"')
-	if [ "$verify_byte" != "$target_slot" ]; then
-		echo "Mercury: ERROR - Flash verification failed at 0x2000A (expected $target_slot, got $verify_byte)"
-		echo "Mercury: CRITICAL - Attempting recovery from backup..."
-		mtd erase "$config_mtd" 2>/dev/null
-		dd if="$backup_file" of="$config_mtd" bs=64k 2>/dev/null
-		rm -f "$backup_file" "$modified_file"
-		return 1
-	fi
-	echo "Mercury: Flash verification passed at 0x2000A (slot=$verify_byte)"
-
-	echo "Mercury: Boot slot switched to $target_slot (both positions verified)"
-
 	rm -f "$backup_file" "$modified_file"
 	return 0
 }
