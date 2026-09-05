@@ -23,11 +23,7 @@ config wifi-device 'radio1'
 	option path '1e140000.pcie/pci0000:00/0000:00:01.0/0000:02:00.0+1'
 	option channel '36'
 	option band '5g'
-	# MT7915E DBDC limitation: When operating both 2.4G and 5G concurrently,
-	# the hardware/DSP physically supports up to 80 MHz (HE80) in 802.11ax mode.
-	# Setting HE160 causes hostapd to fail: "160 MHz channel width is not supported in 5 / 6GHz"
-	# and shuts down the AP. Therefore, HE80 provides the maximum 802.11ax performance.
-	option htmode 'HE80'
+	option htmode 'HE160'
 	option country 'YE'
 	option cell_density '0'
 	option txpower '30'
