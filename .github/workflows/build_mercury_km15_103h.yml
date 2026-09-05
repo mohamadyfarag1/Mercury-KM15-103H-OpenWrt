@@ -4,8 +4,7 @@ on:
   push:
     paths:
       - 'mercury_km15_103h_build/**'
-      - 'scripts/mercury-*.sh'
-      - 'scripts/gen_mt76_patch.py'
+      - 'scripts/**'
       - '.github/workflows/build_mercury_km15_103h.yml'
   workflow_dispatch:
     inputs:
