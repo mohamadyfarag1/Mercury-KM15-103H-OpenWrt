@@ -14,6 +14,7 @@ cp -r ../mercury_km15_103h_build/files/* files/
 find files/usr/bin -type f -exec chmod +x {} \;
 find files/usr/sbin -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/etc/init.d -type f -exec chmod +x {} \; 2>/dev/null || true
+find files/etc/uci-defaults -type f -exec chmod +x {} \; 2>/dev/null || true
 
 echo "Writing target .config for Mercury KM15-103H..."
 cat << 'EOF' > .config

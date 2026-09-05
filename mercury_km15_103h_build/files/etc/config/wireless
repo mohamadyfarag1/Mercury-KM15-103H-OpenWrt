@@ -25,14 +25,12 @@ config wifi-device 'radio1'
 	option path '1e140000.pcie/pci0000:00/0000:00:01.0/0000:02:00.0+1'
 	option channel '36'
 	option band '5g'
-	option htmode 'HE160'
+	# MT7915E in DBDC (Dual Band Concurrent) mode supports up to 80 MHz (HE80).
+	# Note: Extended superchannels at 10 MHz spacing run in 20 MHz mode (HE20).
+	option htmode 'HE80'
 	option country 'US'
 	option cell_density '0'
 	option txpower '30'
-	# CRITICAL for 160 MHz: without noscan, hostapd runs an OBSS scan on
-	# startup and drops 160->80->40 MHz the moment it detects any other
-	# network on overlapping channels. With our no-DFS custom regdb the
-	# 36-64 (5170-5330) block is fully usable, so lock the full width.
 	option noscan '1'
 	option disabled '0'
 
@@ -40,5 +38,5 @@ config wifi-iface 'default_radio1'
 	option device 'radio1'
 	option network 'lan'
 	option mode 'ap'
-	option ssid 'Mercury-KM15-5G-160M'
+	option ssid 'Mercury-KM15-5G'
 	option encryption 'none'

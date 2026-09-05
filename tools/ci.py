@@ -92,8 +92,22 @@ def cmd_build(dgz=False):
     print(f"Dispatched build on master (enable_23ghz={dgz}). Poll with: python3 ci.py watch")
 
 def cmd_watch(interval=90):
+    # A build runs for over an hour, so this loop must outlive a transient
+    # DNS or connectivity blip; it previously died on the first one and lost
+    # the whole watch. Only give up after several consecutive failures.
+    fails = 0
     while True:
-        run = latest_run()
+        try:
+            run = latest_run()
+            fails = 0
+        except (urllib.error.URLError, OSError, SystemExit) as e:
+            fails += 1
+            print(f"[{time.strftime('%H:%M:%S')}] poll failed ({fails}/5): {e}")
+            if fails >= 5:
+                print("giving up: 5 consecutive poll failures")
+                return 1
+            time.sleep(interval)
+            continue
         st, cc = run["status"], run["conclusion"]
         print(f"[{time.strftime('%H:%M:%S')}] {run['head_sha'][:12]} status={st} conclusion={cc}")
         if st == "completed":

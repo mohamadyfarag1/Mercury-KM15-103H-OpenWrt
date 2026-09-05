@@ -422,22 +422,18 @@ if ! "$DTC" -I dtb -O dts -o "$DTB_DTS" "$DTB" 2>/dev/null; then
     exit 1
 fi
 
-# The MAC cell. Nothing else in the image can compensate if this is wrong:
-# with no hardcoded fallback left, a bad offset means every unit ships
-# with a random MAC.
+# The MAC cell. Config partition sits at 0xC0000; base MAC is at offset 0x4 (absolute 0xC0004).
 # dtc zero-pads cell values when it decompiles ("0x06", not "0x6"), and the
 # padding width is not contractual, so match the value rather than a literal
-# rendering of it. An earlier revision grepped for '0x40004 0x6' and failed a
-# build whose DTB was entirely correct.
-if grep -Eq 'reg = <0x0*40004 0x0*6>' "$DTB_DTS"; then
-    echo "  OK       : mac-base nvmem cell at Config+0x40004 (absolute 0x140004)"
-    echo "             NOTE: Config is encrypted; cell is defined but not used by"
-    echo "             eth/wifi nodes.  Factory MAC is read from eth0 hardware at"
-    echo "             runtime (U-Boot programs the Ethernet PHY before booting Linux)."
+# rendering of it.
+if grep -Eq 'reg = <0x0*4 0x0*6>' "$DTB_DTS"; then
+    echo "  OK       : mac-base nvmem cell at Config+0x4 (absolute 0xC0004)"
+    echo "             Kernel nvmem subsystem assigns factory MAC to Ethernet (mac@0)"
+    echo "             and WAN (port@0) directly from NAND."
 else
-    echo "!!!! the compiled DTB has no mac-base cell covering 0x40004+6."
-    echo "     The cell lives in the Config partition (NAND 0x100000); offset"
-    echo "     0x40004 within Config = absolute 0x140004."
+    echo "!!!! the compiled DTB has no mac-base cell covering 0x4+6."
+    echo "     The cell lives in the Config partition (NAND 0xC0000); offset"
+    echo "     0x4 within Config = absolute 0xC0004."
     grep -n -A4 'macaddr' "$DTB_DTS" | head -20
     exit 1
 fi
@@ -450,8 +446,7 @@ if grep -qE 'mac-address = \[' "$DTB_DTS"; then
     exit 1
 fi
 echo "  OK       : no hardcoded mac-address"
-echo "             WiFi MACs are derived at runtime from eth0 (base+2/+3)"
-echo "             via /etc/hotplug.d/ieee80211/10-factory-mac."
+echo "             Ethernet, WAN, and WiFi MACs are cleanly derived from Config nvmem."
 
 # NMBM remaps factory-bad blocks; required for NAND integrity even though
 # the encrypted Config MAC is no longer read via nvmem.
@@ -594,7 +589,7 @@ STEP 3 - Flash to NAND permanently
   its own NAND - so a unit whose Config block is damaged must be caught
   here rather than shipped with a random MAC:
       cfg=$(sed -n 's/^mtd\([0-9]*\):.*"Config".*/\1/p' /proc/mtd)
-      hexdump -C /dev/mtd$cfg -s 0x40004 -n 6
+      hexdump -C /dev/mtd$cfg -s 0x4 -n 6
   It must match the label on the case.  All 00 or all ff means that block
   is damaged - stop and recover that unit before flashing it.
 
@@ -604,7 +599,7 @@ STEP 4 (OPTIONAL) - wipe NAND before flashing
       flash_erase /dev/mtdN 0 0     # firmware / Userdata ONLY
   then do STEP 3.
 
-  NEVER erase Config: it holds the per-unit factory MAC at 0x40004, it is
+  NEVER erase Config: it holds the per-unit factory MAC at 0x4, it is
   not reproducible, and block 6 inside it is a factory bad block that only
   NMBM can remap.  Losing it means that unit boots with a random MAC.
 

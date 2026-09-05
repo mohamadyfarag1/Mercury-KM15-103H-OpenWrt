@@ -292,13 +292,9 @@ mercury_switch_boot_slot() {
 	local modified_file="/tmp/config_modified.bin"
 	local verify_byte mac_hex
 
-	# Erasing Config is the single most dangerous thing this script does.
-	# Config spans NAND 0x100000-0x180000.  The partition is encrypted by the
-	# factory bootloader; neither the slot byte nor the MAC at offset 0x40004
-	# (absolute 0x140004) are readable as plain-text by Linux.  The MAC check
-	# below will always fail (encrypted bytes != valid OUI), so this function
-	# will always return 1 without touching the flash - which is safe.
-	# U-Boot decrypts Config and handles boot-slot selection itself.
+	# Config partition spans NAND 0x0C0000-0x100000 (256 KB = 2 blocks).
+	# Base MAC address is stored at offset 0x4 (and backup copy at 0x20004).
+	# Boot slot bytes are at offset 10 (0xA) and 131082 (0x2000A).
 	if [ "$(dd if="$config_mtd" bs=1 skip=10 count=1 2>/dev/null | hexdump -e '"%d"')" = "$target_slot" ] &&
 	   [ "$(dd if="$config_mtd" bs=1 skip=131082 count=1 2>/dev/null | hexdump -e '"%d"')" = "$target_slot" ]; then
 		echo "Mercury: Boot slot already $target_slot - leaving Config untouched."
@@ -314,13 +310,12 @@ mercury_switch_boot_slot() {
 		return 1
 	fi
 
-	# If the backup did not capture a plausible MAC, the read hit the bad
-	# block and writing this image back would erase the factory MAC for
-	# good.  Refuse rather than destroy unrecoverable factory data.
-	mac_hex=$(dd if="$backup_file" bs=1 skip=262148 count=6 2>/dev/null | hexdump -v -e '6/1 "%02x"')
+	# If the backup did not capture a plausible MAC, refuse rather than
+	# destroy unrecoverable factory data.
+	mac_hex=$(dd if="$backup_file" bs=1 skip=4 count=6 2>/dev/null | hexdump -v -e '6/1 "%02x"')
 	case "$mac_hex" in
 		"" | 000000000000 | ffffffffffff)
-			echo "Mercury: ERROR - Config backup has no valid MAC at 0x40004 (read '$mac_hex')."
+			echo "Mercury: ERROR - Config backup has no valid MAC at 0x4 (read '$mac_hex')."
 			echo "Mercury: Refusing to erase Config - that would destroy the factory MAC."
 			rm -f "$backup_file"
 			return 1

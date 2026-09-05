@@ -13,7 +13,7 @@ echo "Setting up Device Tree for Mercury KM15-103H..."
 
 # Use modified canonical DTS source
 if [ -f "../mercury_km15_103h_build/mercury_km15_103h.dts" ]; then
-    echo "Copying canonical mercury_km15_103h.dts (with 6MB kernel and 0x40004 MAC fix)..."
+    echo "Copying canonical mercury_km15_103h.dts (with 6MB kernel, Config at 0xC0000, and 0x4 MAC fix)..."
     cp ../mercury_km15_103h_build/mercury_km15_103h.dts "$dts_target"
 elif [ -f "../mercury_km15_103h_build/device_tree.dtb" ]; then
     echo "Decompiling factory device_tree.dtb using dtc..."

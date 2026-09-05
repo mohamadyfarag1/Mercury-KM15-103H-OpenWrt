@@ -60,6 +60,13 @@ with open(path, "r", encoding="utf-8") as f:
     content = f.read()
 
 entry = """\tmercury,km15-103h)
+\t\tlocal wan_mac lan_mac
+\t\twan_mac=\\$(mtd_get_mac_binary Config 0x4)
+\t\tif [ -n "\\$wan_mac" ]; then
+\t\t\tlan_mac=\\$(macaddr_add "\\$wan_mac" 1)
+\t\t\tucidef_set_interface_macaddr "lan" "\\$lan_mac"
+\t\t\tucidef_set_interface_macaddr "wan" "\\$wan_mac"
+\t\tfi
 \t\tucidef_set_interfaces_lan_wan "lan1 lan2 lan3 lan4" "wan"
 \t\t;;
 """
