@@ -37,6 +37,54 @@ if [ -f "files/lib/netifd/hostapd.sh" ]; then
     cp -f files/lib/netifd/hostapd.sh package/network/config/wifi-scripts/files/lib/netifd/hostapd.sh 2>/dev/null || true
 fi
 
+# Inject hostapd SuperChannel patch to allow 5900MHz+ and 2.3-2.732GHz
+mkdir -p package/network/services/hostapd/patches
+cat << 'EOF' > package/network/services/hostapd/patches/999-mercury-superchannels.patch
+--- a/src/common/ieee802_11_common.c
++++ b/src/common/ieee802_11_common.c
+@@ -1519,6 +1519,33 @@ enum hostapd_hw_mode
+ 	if (sec_channel > 1 || sec_channel < -1)
+ 		return NUM_HOSTAPD_MODES;
+ 
++	/* Mercury: 2.3 GHz SuperChannels (2312 - 2407 MHz) -> channels 237..256 */
++	if (freq >= 2312 && freq <= 2407) {
++		if ((freq - 2312) % 5)
++			return NUM_HOSTAPD_MODES;
++		*channel = 237 + (freq - 2312) / 5;
++		*op_class = 81;
++		return HOSTAPD_MODE_IEEE80211G;
++	}
++
++	/* Mercury: 2.4 GHz transition channels (2477 - 2507 MHz) -> channels 74..80 */
++	if (freq >= 2477 && freq <= 2507 && freq != 2484) {
++		if ((freq - 2477) % 5)
++			return NUM_HOSTAPD_MODES;
++		*channel = 74 + (freq - 2477) / 5;
++		*op_class = 81;
++		return HOSTAPD_MODE_IEEE80211G;
++	}
++
++	/* Mercury: Upper 2.5 - 2.732 GHz SuperChannels (2512 - 2732 MHz) -> channels 15..59 */
++	if (freq >= 2512 && freq <= 2732) {
++		if ((freq - 2437) % 5)
++			return NUM_HOSTAPD_MODES;
++		*channel = (freq - 2437) / 5;
++		*op_class = 81;
++		return HOSTAPD_MODE_IEEE80211G;
++	}
++
+ 	if (freq >= 2412 && freq <= 2472) {
+ 		if ((freq - 2407) % 5)
+ 			return NUM_HOSTAPD_MODES;
+@@ -1650,4 +1677,4 @@ enum hostapd_hw_mode
+-	if (freq >= 5000 && freq < 5900) {
++	if (freq >= 5000 && freq <= 6000 && freq != 5935) {
+ 		if ((freq - 5000) % 5)
+ 			return NUM_HOSTAPD_MODES;
+ 		*channel = (freq - 5000) / 5;
+EOF
+
+
 echo "Writing target .config for Mercury KM15-103H..."
 cat << 'EOF' > .config
 # Target System
