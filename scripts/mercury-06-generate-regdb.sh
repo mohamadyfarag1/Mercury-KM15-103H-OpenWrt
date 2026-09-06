@@ -51,7 +51,7 @@ countries = [
 with open('db.txt', 'w') as f:
     for c in countries:
         f.write('country %s:\n' % c)
-        f.write('\t(2182 - 2494 @ 40), (33)\n')
+        f.write('\t(2182 - 2750 @ 40), (33)\n')
         f.write('\t(4910 - 5935 @ 160), (33)\n')
         f.write('\n')
 print('Generated db.txt with %d countries' % len(countries))

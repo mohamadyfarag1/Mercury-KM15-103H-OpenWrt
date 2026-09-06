@@ -69,7 +69,15 @@ CHANS_5G = list(range(24, 186))
 # `chan = (int)(char)chan;` patch (mercury-07-superchannel.sh) for the
 # kernel to map those numbers back to frequencies correctly.
 # ---------------------------------------------------------------------
-CHANS_23G = list(range(-19, 0))          # -19 .. -1  => 2312 .. 2402 MHz
+# 2.4 GHz channel plan: 86-channel expanded spectrum (2312 MHz - 2732 MHz)
+# Matches Ubiquiti NanoStation M2 spectrum + standard 802.11 channels:
+# - 2.3 GHz band: Channels -19..-1 (2312-2402 MHz) + Ch 0 (2407 MHz)
+# - Standard 2.4 GHz: Channels 1-13 (2412-2472 MHz)
+# - Standard 802.11b Japan: Channel 14 (2484 MHz)
+# - Transition band: Channels 74-80 (2477-2507 MHz)
+# - Upper 2.5-2.732 GHz band: Channels 15-59 (2512-2732 MHz)
+CHANS_23G = list(range(-19, 1))          # -19 .. 0   => 2312 .. 2407 MHz
+CHANS_UPPER_2G = [74, 75, 76, 77, 78, 79, 80] + list(range(15, 60))
 
 ENABLE_23G = os.environ.get('MERCURY_ENABLE_23GHZ', '').strip().lower() not in ('0', 'no', 'false', 'disable')
 
@@ -180,11 +188,20 @@ def main():
         ]
         if not stock_nums:
             fail('could not read the stock 2.4 GHz channel numbers')
-        chans_2g = CHANS_23G + stock_nums
+        chans_2g = CHANS_23G + stock_nums + CHANS_UPPER_2G
 
         def freq_2g_mixed(ch):
-            # Channel 14 is the documented exception to 2407 + N*5.
-            return 2484 if ch == 14 else freq_2g(ch)
+            if ch == 14:
+                return 2484
+            if ch == 74:
+                return 2477
+            if ch == 75:
+                return 2482
+            if 76 <= ch <= 80:
+                return 2487 + (ch - 76) * 5
+            if 15 <= ch <= 59:
+                return 2437 + ch * 5
+            return freq_2g(ch)
 
         new_text = replace_array(
             new_text, 'mt76_channels_2ghz', 'CHAN2G', chans_2g, freq_2g_mixed)
