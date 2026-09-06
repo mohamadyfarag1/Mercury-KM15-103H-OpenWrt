@@ -1228,6 +1228,20 @@ hostapd_set_bss_options() {
 		append bss_conf "$val" "$N"
 	done
 
+	# Horus Ubiquiti airMAX AP Beacon/Probe IE Injection (OUI 00:27:22)
+	local dev_airmax
+	json_get_vars airmax airmax_compat vendor_elements
+	dev_airmax=$(uci -q get "wireless.${phy}.airmax_compat")
+	[ -z "$dev_airmax" ] && dev_airmax=$(uci -q get "wireless.radio1.airmax_compat")
+	if [ "$airmax" = "1" ] || [ "$airmax_compat" = "1" ] || [ "$dev_airmax" = "1" ]; then
+		local airmax_ie="dd080027220002040608"
+		case "$vendor_elements" in
+			*"$airmax_ie"*) ;;
+			?*) append bss_conf "vendor_elements=$vendor_elements $airmax_ie" "$N" ;;
+			*) append bss_conf "vendor_elements=$airmax_ie" "$N" ;;
+		esac
+	fi
+
 	append "$var" "$bss_conf" "$N"
 	return 0
 }
@@ -1666,7 +1680,13 @@ wpa_supplicant_add_network() {
 			net_ve="dd080027220002040608"
 		fi
 	fi
-	[ -n "$net_ve" ] && append network_data "vendor_elements=$net_ve" "$N$T"
+	if [ -n "$net_ve" ]; then
+		(
+			sleep 2
+			wpa_cli -p /var/run/wpa_supplicant -i "$ifname" vendor_elem_add 0 "$net_ve" 2>/dev/null || true
+			wpa_cli -p /var/run/wpa_supplicant -i "$ifname" vendor_elem_add 11 "$net_ve" 2>/dev/null || true
+		) &
+	fi
 
 	json_get_values extra_supplicant_opts wpa_supplicant_options
 	[ -z "$extra_supplicant_opts" ] && json_get_values extra_supplicant_opts supplicant_options

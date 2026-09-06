@@ -31,6 +31,12 @@ if [ -d "$LUCI_NET_DIR" ]; then
         cp -f files/www/luci-static/resources/view/network/wireless.js.gz "$LUCI_NET_DIR/wireless.js.gz" 2>/dev/null || true
 fi
 
+# Inject custom hostapd.sh into wifi-scripts package tree
+if [ -f "files/lib/netifd/hostapd.sh" ]; then
+    echo "Injecting custom hostapd.sh with airMAX support into wifi-scripts package..."
+    cp -f files/lib/netifd/hostapd.sh package/network/config/wifi-scripts/files/lib/netifd/hostapd.sh 2>/dev/null || true
+fi
+
 echo "Writing target .config for Mercury KM15-103H..."
 cat << 'EOF' > .config
 # Target System

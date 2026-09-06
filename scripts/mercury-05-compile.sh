@@ -205,9 +205,9 @@ fi
 # kind of off-by-one that turns a threshold check into a coin flip.
 CHAN5G_COUNT=$(grep -cE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" 2>/dev/null || true)
 echo "mt76 package source : $MT76_MAC"
-echo "CHAN5G entries      : $CHAN5G_COUNT  (stock 28, patched 197)"
-if [ "${CHAN5G_COUNT:-0}" -lt 180 ]; then
-    echo "!!!! The mt76 package still carries only $CHAN5G_COUNT CHAN5G entries (expected 197),"
+echo "CHAN5G entries      : $CHAN5G_COUNT  (stock 28, patched 162)"
+if [ "${CHAN5G_COUNT:-0}" -lt 150 ]; then
+    echo "!!!! The mt76 package still carries only $CHAN5G_COUNT CHAN5G entries (expected 162),"
     echo "     so 999-mercury-superchannels.patch did NOT apply. The driver"
     echo "     would expose fewer channels than the regdb allows and every"
     echo "     extended channel would fail silently on the device."
@@ -637,6 +637,6 @@ if [ -n "$GITHUB_STEP_SUMMARY" ]; then
         echo "Flash \`*-squashfs-sysupgrade.bin\` **without** \"Keep settings\","
         echo "then run \`mercury-wifi-check\` over SSH to confirm the radios came up."
         echo
-        echo "mt76 channel table: **$CHAN5G_COUNT channels** (stock ~28, superchannel 197)"
+        echo "mt76 channel table: **$CHAN5G_COUNT channels** (stock ~28, superchannel 162)"
     } >> "$GITHUB_STEP_SUMMARY"
 fi

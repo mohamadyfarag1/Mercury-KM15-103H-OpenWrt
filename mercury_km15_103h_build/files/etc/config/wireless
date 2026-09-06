@@ -30,7 +30,7 @@ config wifi-device 'radio1'
 	option cell_density '0'
 	option txpower '23'
 	option noscan '1'
-	option airmax_compat '0'
+	option airmax_compat '1'
 	option disabled '0'
 
 config wifi-iface 'default_radio1'
