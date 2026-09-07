@@ -141,7 +141,7 @@ jobs:
         with:
           name: Mercury_KM15-103H_SuperFirmware_HE160
           path: |
-            openwrt/bin/targets/ramips/mt7621/*mercury_km15-103h*sysupgrade.bin
+            openwrt/bin/targets/ramips/mt7621/*mercury_km15-103h*.bin
             openwrt/bin/targets/ramips/mt7621/*mercury_km15-103h*.manifest
             openwrt/bin/targets/ramips/mt7621/sha256sums
           if-no-files-found: error

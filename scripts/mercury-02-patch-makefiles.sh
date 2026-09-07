@@ -51,7 +51,9 @@ define Device/mercury_km15-103h
   # is what makes the image get built at all - no IMAGE/initramfs-* entry
   # is needed, and the one used here before was simply inert.
   KERNEL_INITRAMFS_SUFFIX := -uImage.itb
+  KERNEL_SIZE := 6144k
   IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+  IMAGE/factory.bin := append-kernel | pad-to $$(KERNEL_SIZE) | append-ubi | check-size
 endef
 TARGET_DEVICES += mercury_km15-103h
 
