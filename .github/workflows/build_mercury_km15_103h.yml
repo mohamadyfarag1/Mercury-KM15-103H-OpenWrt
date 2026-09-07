@@ -1,5 +1,6 @@
 name: Build Custom OpenWrt for Mercury KM15-103H (HE160 Superchannel)
 
+# Re-trigger build on public repository
 on:
   push:
     paths:
