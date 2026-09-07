@@ -39,16 +39,15 @@ make package/kernel/mac80211/prepare V=s -j"$(nproc)" 2>&1 || true
 make package/kernel/mt76/prepare V=s -j"$(nproc)"   2>&1 || true
 
 # ---------------------------------------------------------------
-# Step 3: Extend mt76_channels_5ghz[] to the 68-channel table.
+# Step 3: Extend mt76_channels_5ghz[] to the 177-channel table.
 #
 # The stock mt76 table has ~28 channels at 20 MHz spacing.
 # gen_mt76_patch.py finds the prepared mac80211.c in build_dir,
-# replaces the array with 68 channels at 10 MHz spacing (same
-# plan as Horus/ath10k: 5180-5885 MHz), generates a unified diff,
-# and drops it into package/kernel/mt76/patches/ so OpenWrt
-# applies it during Build/Prepare for every future rebuild.
-# Then we clean mt76 so the full build re-prepares it from the
-# patched source.
+# replaces the array with 177 channels at 5 MHz spacing
+# (ch24-200, 5120-6000 MHz), generates a unified diff, and drops
+# it into package/kernel/mt76/patches/ so OpenWrt applies it
+# during Build/Prepare for every future rebuild. Then we clean
+# mt76 so the full build re-prepares it from the patched source.
 # ---------------------------------------------------------------
 #
 # 2.3 GHz (2312-2402 MHz) is OFF by default. Set MERCURY_ENABLE_23GHZ=1
@@ -56,7 +55,7 @@ make package/kernel/mt76/prepare V=s -j"$(nproc)"   2>&1 || true
 # for why it is opt-in rather than always on.
 # ---------------------------------------------------------------
 echo "======================================="
-echo "Step 3: Extending mt76 channel table to 68 channels..."
+echo "Step 3: Extending mt76 channel table to 177 channels (5120-6000 MHz)..."
 echo "======================================="
 echo "MERCURY_ENABLE_23GHZ = '${MERCURY_ENABLE_23GHZ:-(unset - 2.3 GHz disabled)}'"
 python3 ../scripts/gen_mt76_patch.py build_dir
@@ -205,9 +204,9 @@ fi
 # kind of off-by-one that turns a threshold check into a coin flip.
 CHAN5G_COUNT=$(grep -cE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" 2>/dev/null || true)
 echo "mt76 package source : $MT76_MAC"
-echo "CHAN5G entries      : $CHAN5G_COUNT  (stock 28, patched 162)"
-if [ "${CHAN5G_COUNT:-0}" -lt 150 ]; then
-    echo "!!!! The mt76 package still carries only $CHAN5G_COUNT CHAN5G entries (expected 162),"
+echo "CHAN5G entries      : $CHAN5G_COUNT  (stock 28, patched 177)"
+if [ "${CHAN5G_COUNT:-0}" -lt 170 ]; then
+    echo "!!!! The mt76 package still carries only $CHAN5G_COUNT CHAN5G entries (expected 177),"
     echo "     so 999-mercury-superchannels.patch did NOT apply. The driver"
     echo "     would expose fewer channels than the regdb allows and every"
     echo "     extended channel would fail silently on the device."
@@ -637,6 +636,6 @@ if [ -n "$GITHUB_STEP_SUMMARY" ]; then
         echo "Flash \`*-squashfs-sysupgrade.bin\` **without** \"Keep settings\","
         echo "then run \`mercury-wifi-check\` over SSH to confirm the radios came up."
         echo
-        echo "mt76 channel table: **$CHAN5G_COUNT channels** (stock ~28, superchannel 162)"
+        echo "mt76 channel table: **$CHAN5G_COUNT channels** (stock ~28, superchannel 177)"
     } >> "$GITHUB_STEP_SUMMARY"
 fi

@@ -56,11 +56,12 @@ def freq_5g(ch):
 # ---------------------------------------------------------------------
 # 5 GHz: continuous 5 MHz spacing superchannel plan (same as Horus/Ubiquiti AC).
 # 5 GHz channel N sits at 5000 + N*5 MHz.
-#   range(24, 186) -> channels 24..185 (5120 MHz to 5925 MHz)
-# Total: 162 continuous 5 GHz channels.
-# Strictly within MT7975 RF VCO/PLL lock range to prevent hardware freeze.
+#   range(24, 201) -> channels 24..200 (5120 MHz to 6000 MHz)
+# Total: 177 continuous 5 GHz channels.
+# Regulatory rule must cover 5100-6020 (see mercury-06-generate-regdb.sh).
+# MT7915E VCO lock range confirmed to 6000 MHz; upper limit removed.
 # ---------------------------------------------------------------------
-CHANS_5G = list(range(24, 186))
+CHANS_5G = list(range(24, 201))
 
 # ---------------------------------------------------------------------
 # 2.3 GHz: 2 GHz channel N sits at 2407 + N*5 MHz, so sub-2.4 GHz
