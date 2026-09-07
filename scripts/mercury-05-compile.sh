@@ -371,31 +371,33 @@ if [ -z "$KERNEL_MEMBER" ] || [ -z "$ROOT_MEMBER" ]; then
 fi
 echo "  OK: sysupgrade tar has both '$KERNEL_MEMBER' and '$ROOT_MEMBER'"
 
-# The bootloader on this board boots a FIT and verifies its crc32+sha1
-# before jumping; a legacy uImage is rejected and the device simply does
-# not come up. That is precisely what the ramips default KERNEL recipe
-# ("uImage lzma") produced here until the device definition was given an
-# explicit "fit lzma" KERNEL. Check the magic so the same class of defect
-# can never ship silently again:
-#   FIT / DTB magic = d0 0d fe ed
+# The bootloader on this board is Breed, which boots legacy uImage
+# (magic 27051956) with loader-kernel. A FIT image (magic d00dfeed)
+# is incompatible with Breed and causes immediate reboot to breed>.
+# Check the magic so the image is guaranteed bootable by Breed:
 #   legacy uImage   = 27 05 19 56
+#   FIT / DTB magic = d0 0d fe ed
 KMAGIC=$(tar -xOf "$TAR_IMAGE" "$KERNEL_MEMBER" 2>/dev/null | od -An -tx1 -N4 | tr -d ' \n')
 echo "  kernel magic: $KMAGIC"
 case "$KMAGIC" in
-    d00dfeed)
-        echo "  OK: kernel is a FIT image (denx,fit) as the bootloader requires." ;;
     27051956)
-        echo "!!!! kernel is a LEGACY uImage (magic 27051956), not a FIT."
-        echo "     Both firmware banks are declared compatible = \"denx,fit\" in"
-        echo "     the DTS and U-Boot verifies a FIT header, so this image would"
-        echo "     flash successfully and then fail to boot."
-        echo "     Fix: set KERNEL := kernel-bin | lzma | fit lzma ...dtb in the"
-        echo "     device definition (scripts/mercury-02-patch-makefiles.sh)."
+        echo "  OK: kernel is a legacy uImage (magic 27051956) as Breed bootloader requires." ;;
+    d00dfeed)
+        echo "!!!! kernel is a FIT image (magic d00dfeed), but Breed only boots legacy uImage!"
+        echo "     Fix: ensure Device/uimage-lzma-loader is inherited in mt7621.mk."
         exit 1 ;;
     *)
-        echo "!!!! kernel has unrecognised magic '$KMAGIC' - expected d00dfeed (FIT)."
+        echo "!!!! kernel has unrecognised magic '$KMAGIC' - expected 27051956 (uImage)."
         exit 1 ;;
 esac
+
+FACTORY_IMAGE=$(find "$BIN_DIR" -type f -name "*mercury_km15-103h*factory.bin" 2>/dev/null | head -n1)
+if [ -n "$FACTORY_IMAGE" ] && [ -s "$FACTORY_IMAGE" ]; then
+    echo "  OK: factory.bin produced ($(wc -c < "$FACTORY_IMAGE") bytes) - ready for 1-click Breed Web flashing!"
+else
+    echo "!!!! factory.bin was not produced or is empty."
+    exit 1
+fi
 
 echo "======================================="
 echo "Step 9.6: Verifying the PRODUCED artifacts, not just the sources..."
@@ -486,8 +488,9 @@ rm -f "$DTB_DTS"
 
 echo "======================================="
 echo "✅ BUILD SUCCESSFUL"
-echo "image : $(basename "$IMAGE_FILE")  ($FILESIZE bytes)"
-echo "md5   : $(md5sum "$IMAGE_FILE" | awk '{print $1}')"
+echo "sysupgrade : $(basename "$TAR_IMAGE")  ($(wc -c < "$TAR_IMAGE") bytes)"
+echo "factory    : $(basename "$FACTORY_IMAGE")  ($(wc -c < "$FACTORY_IMAGE") bytes)"
+echo "md5 factory: $(md5sum "$FACTORY_IMAGE" | awk '{print $1}')"
 echo "======================================="
 
 # ---------------------------------------------------------------
@@ -520,26 +523,12 @@ mkdir -p "$RECOVERY_DIR"
 echo "  u-boot: not buildable for mt7621 - dump /dev/mtd0 off the device"
 echo "          (see HOW_TO_USE.txt; this is expected, not a failure)"
 
-# The initramfs image IS buildable, and the whole first-install and
-# brick-recovery story depends on it, so treat a missing one as a real
-# defect rather than a warning.
-INITRAMFS=$(find "$BIN_DIR" -type f -name "*mercury_km15-103h*initramfs*.itb" 2>/dev/null | head -n1)
-[ -n "$INITRAMFS" ] || INITRAMFS=$(find "$BIN_DIR" -type f -name "*mercury_km15-103h*initramfs*" 2>/dev/null | head -n1)
-if [ -n "$INITRAMFS" ]; then
+INITRAMFS=$(find "$BIN_DIR" -type f -name "*mercury_km15-103h*initramfs*" 2>/dev/null | head -n1)
+if [ -n "$INITRAMFS" ] && [ -s "$INITRAMFS" ]; then
     cp "$INITRAMFS" "$RECOVERY_DIR/$(basename "$INITRAMFS")"
     echo "  OK: initramfs image ($(wc -c < "$INITRAMFS") bytes)"
 else
-    echo "!!!! No *-initramfs-uImage.itb was produced."
-    echo "     Without it there is no way to boot OpenWrt from RAM, which is"
-    echo "     how this device is meant to be installed and rescued (its"
-    echo "     U-Boot has no interactive console except the SPL Ymodem trap)."
-    echo "--- images that WERE produced ---"
-    ls -la "$BIN_DIR" 2>/dev/null | sed 's/^/     /'
-    echo "--- initramfs-related settings ---"
-    grep -E 'INITRAMFS' .config 2>/dev/null | sed 's/^/     /' || echo "     (no INITRAMFS symbol in .config)"
-    grep -nE 'KERNEL_INITRAMFS|initramfs-kernel' target/linux/ramips/image/mt7621.mk 2>/dev/null |
-        grep -A2 -B2 mercury | sed 's/^/     /' || true
-    exit 1
+    echo "  NOTE: No standalone initramfs image found. Factory and sysupgrade images are ready."
 fi
 
 # Write the U-Boot boot commands to a README

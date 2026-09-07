@@ -379,7 +379,7 @@
         label = "Factory";
         name = "partition";
         read-only;
-        reg = <0x100000 0x80000>;
+        reg = <0x100000 0x40000>;
         nvmem-layout {
           #address-cells = <0x1>;
           #size-cells = <0x1>;
@@ -397,15 +397,15 @@
           };
         };
       };
-      partition@180000 {
+      partition@140000 {
         label = "firmware";
         name = "partition";
-        reg = <0x180000 0x600000>;
+        reg = <0x140000 0x600000>;
       };
-      partition@780000 {
+      partition@740000 {
         label = "ubi";
         name = "partition";
-        reg = <0x780000 0x5a00000>;
+        reg = <0x740000 0x5a40000>;
       };
       partition@6180000 {
         label = "Userdata";

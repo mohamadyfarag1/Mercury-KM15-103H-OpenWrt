@@ -130,9 +130,9 @@ jobs:
                 "$(du -h "$f" | cut -f1)" \
                 "$(sha256sum "$f" | cut -c1-16)..."
             done
-            echo
-            echo "Flash \`*-squashfs-sysupgrade.bin\` **without** \"Keep settings\","
-            echo "then run \`mercury-wifi-check\` over SSH to confirm the radios came up."
+            echo "1. Initial Install: Flash \`*-squashfs-factory.bin\` directly via Breed Web GUI (192.168.1.1)."
+            echo "2. Routine Upgrades: Flash \`*-squashfs-sysupgrade.bin\` via LuCI (without \"Keep settings\")."
+            echo "Then run \`mercury-wifi-check\` over SSH to confirm the MT7915 radios came up."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload Flashable Firmware Artifact
