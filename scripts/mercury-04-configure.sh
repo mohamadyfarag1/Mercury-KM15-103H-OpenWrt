@@ -140,6 +140,22 @@ CONFIG_PACKAGE_ca-bundle=y
 CONFIG_PACKAGE_mtd=y
 CONFIG_PACKAGE_ubi-utils=y
 
+# USB 2.0 / 3.0 Storage & Extroot Packages
+CONFIG_PACKAGE_kmod-usb-core=y
+CONFIG_PACKAGE_kmod-usb3=y
+CONFIG_PACKAGE_kmod-usb2=y
+CONFIG_PACKAGE_kmod-usb-storage=y
+CONFIG_PACKAGE_kmod-usb-storage-uas=y
+CONFIG_PACKAGE_kmod-fs-ext4=y
+CONFIG_PACKAGE_kmod-fs-vfat=y
+CONFIG_PACKAGE_kmod-nls-cp437=y
+CONFIG_PACKAGE_kmod-nls-iso8859-1=y
+CONFIG_PACKAGE_kmod-nls-utf8=y
+CONFIG_PACKAGE_block-mount=y
+CONFIG_PACKAGE_e2fsprogs=y
+CONFIG_PACKAGE_fdisk=y
+CONFIG_PACKAGE_usbutils=y
+
 # Base filesystem
 CONFIG_TARGET_ROOTFS_SQUASHFS=y
 CONFIG_TARGET_ROOTFS_UBIFS=y
@@ -232,7 +248,9 @@ OPTIONAL="CONFIG_TARGET_ROOTFS_INITRAMFS \
 CONFIG_PACKAGE_nand-utils \
 CONFIG_PACKAGE_irqbalance \
 CONFIG_PACKAGE_luci \
-CONFIG_PACKAGE_uboot-envtools"
+CONFIG_PACKAGE_uboot-envtools \
+CONFIG_PACKAGE_kmod-usb3 \
+CONFIG_PACKAGE_block-mount"
 
 MISSING=""
 for SYM in $CRITICAL; do

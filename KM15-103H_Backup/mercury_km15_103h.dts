@@ -836,6 +836,7 @@
     name = "xhci";
     reg = <0x1e1c0000 0x1000 0x1e1d0700 0x100>;
     reg-names = "mac", "ippc";
+    status = "okay";
     vbus-supply = <0xe>;
     vusb33-supply = <0xf>;
     port@1 {
