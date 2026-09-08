@@ -44,7 +44,7 @@ make package/kernel/mt76/prepare V=s -j"$(nproc)"   2>&1 || true
 # The stock mt76 table has ~28 channels at 20 MHz spacing.
 # gen_mt76_patch.py finds the prepared mac80211.c in build_dir,
 # replaces the array with 177 channels at 5 MHz spacing
-# (ch24-200, 5120-6000 MHz), generates a unified diff, and drops
+# (ch20-220, 5100-6100 MHz), generates a unified diff, and drops
 # it into package/kernel/mt76/patches/ so OpenWrt applies it
 # during Build/Prepare for every future rebuild. Then we clean
 # mt76 so the full build re-prepares it from the patched source.
@@ -55,7 +55,7 @@ make package/kernel/mt76/prepare V=s -j"$(nproc)"   2>&1 || true
 # for why it is opt-in rather than always on.
 # ---------------------------------------------------------------
 echo "======================================="
-echo "Step 3: Extending mt76 channel table to 177 channels (5120-6000 MHz)..."
+echo "Step 3: Extending mt76 channel table to 177 channels (5100-6100 MHz)..."
 echo "======================================="
 echo "MERCURY_ENABLE_23GHZ = '${MERCURY_ENABLE_23GHZ:-(unset - 2.3 GHz disabled)}'"
 python3 ../scripts/gen_mt76_patch.py build_dir

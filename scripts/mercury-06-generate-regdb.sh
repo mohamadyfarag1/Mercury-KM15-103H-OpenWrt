@@ -52,13 +52,13 @@ with open('db.txt', 'w') as f:
     for c in countries:
         f.write('country %s:\n' % c)
         # 2.4 GHz: 2182-2750 covers ch1-13 + ch12,13,14 + extended 2.3/2.5 bands
-        # 5 GHz: plan is ch24..200 = 5120..6000 MHz in 5 MHz steps.
+        # 5 GHz: plan is ch20..220 = 5100..6100 MHz in 5 MHz steps.
         #   cfg80211 requires centre ± 10 MHz inside rule → floor ≤ 5110, ceil ≥ 6010.
         #   For HE160 / VHT160 the outermost sub-channel must also fit:
         #   lowest 160 MHz block has sub-channels starting at 5120, centre needs 5110+ ✓
-        #   highest block top sub-channel 6000 needs ceil ≥ 6010 → 6020 gives margin.
+        #   highest block top sub-channel 6100 needs ceil ≥ 6010 → 6120 gives margin.
         f.write('\t(2182 - 2750 @ 40), (33)\n')
-        f.write('\t(5100 - 6020 @ 160), (33)\n')
+        f.write('\t(5100 - 6120 @ 160), (33)\n')
         f.write('\n')
 print('Generated db.txt with %d countries' % len(countries))
 PYEOF

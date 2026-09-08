@@ -86,7 +86,7 @@ new_world_rules = """static const struct ieee80211_regdomain world_regdom = {
 \t.alpha2 = "00",
 \t.reg_rules = {
 \t\tREG_RULE(2182 - 10, 2750 + 10, 40, 0, 30, 0),
-\t\tREG_RULE(4910 - 10, 5935 + 10, 160, 0, 30, 0),
+\t\tREG_RULE(4910 - 10, 6110 + 10, 160, 0, 30, 0),
 \t},
 };"""
 
