@@ -1,0 +1,14 @@
+#!/bin/sh
+
+# Modify LuCI system.js to change the hostname validation from 'hostname' to 'string'.
+# This allows UTF-8 characters like Arabic for the device hostname.
+
+TARGET_FILE="/www/luci-static/resources/view/system/system.js"
+
+if [ -f "$TARGET_FILE" ]; then
+    # LuCI minifies 'hostname' so we replace the literal assignment
+    sed -i "s/datatype='hostname'/datatype='string'/g" "$TARGET_FILE"
+    sed -i 's/datatype="hostname"/datatype="string"/g' "$TARGET_FILE"
+fi
+
+exit 0
