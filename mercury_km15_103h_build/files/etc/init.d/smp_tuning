@@ -1,0 +1,86 @@
+#!/bin/sh /etc/rc.common
+# =====================================================================
+# Mercury KM15-103H - MT7621AT Quad-Thread Multi-Core SMP & IRQ Optimizer
+#
+# Hardware: MediaTek MT7621AT (2 Physical Cores, 4 Virtual Threads / VPEs @ 880MHz)
+#
+# Workload Distribution:
+#   CPU 0 (Mask 0x1): OS Kernel, Netifd, LuCI Web UI, Hostapd Management, DNS/DHCP
+#   CPU 1 (Mask 0x2): Gigabit Ethernet & MT7530 Switch Queues
+#   CPU 2 (Mask 0x4): MT7915E PCIe Host Interface (HIF) Bus Transactions
+#   CPU 3 (Mask 0x8): MT7915E Wi-Fi Radio Processing & Hardware Crypto Acceleration
+#
+# Packet Steering (RPS & XPS):
+#   Spreads network & Wi-Fi flow hash processing across Cores 1, 2, 3 (Mask 0xE)
+# =====================================================================
+
+START=98
+STOP=10
+
+start() {
+    logger -t mercury-smp "Applying optimized MT7621AT Quad-Thread SMP & IRQ affinity..."
+
+    # 1. Distribute Ethernet IRQ (1e100000.ethernet) -> CPU 1 (Mask 2)
+    local eth_irq=$(awk -F: '/(1e100000\.ethernet|ethernet)/ {print $1}' /proc/interrupts | tr -d ' ')
+    for irq in $eth_irq; do
+        [ -d "/proc/irq/$irq" ] && echo 2 > "/proc/irq/$irq/smp_affinity" 2>/dev/null
+    done
+
+    # 2. Distribute MT7530 Switch IRQ -> CPU 1 (Mask 2)
+    local sw_irq=$(awk -F: '/mt7530/ {print $1}' /proc/interrupts | tr -d ' ')
+    for irq in $sw_irq; do
+        [ -d "/proc/irq/$irq" ] && echo 2 > "/proc/irq/$irq/smp_affinity" 2>/dev/null
+    done
+
+    # 3. Distribute Wi-Fi PCIe HIF IRQ (mt7915e-hif) -> CPU 2 (Mask 4)
+    local hif_irq=$(awk -F: '/mt7915e-hif/ {print $1}' /proc/interrupts | tr -d ' ')
+    for irq in $hif_irq; do
+        [ -d "/proc/irq/$irq" ] && echo 4 > "/proc/irq/$irq/smp_affinity" 2>/dev/null
+    done
+
+    # 4. Distribute Wi-Fi Radio IRQ (mt7915e) -> CPU 3 (Mask 8)
+    local wifi_irq=$(awk -F: '/(mt7915e$|mt7915)/ {print $1}' /proc/interrupts | tr -d ' ')
+    for irq in $wifi_irq; do
+        [ -d "/proc/irq/$irq" ] && echo 8 > "/proc/irq/$irq/smp_affinity" 2>/dev/null
+    done
+
+    # 5. Distribute Hardware Crypto Engine IRQ (1e004000.crypto) -> CPU 3 (Mask 8)
+    local crypto_irq=$(awk -F: '/(1e004000\.crypto|crypto)/ {print $1}' /proc/interrupts | tr -d ' ')
+    for irq in $crypto_irq; do
+        [ -d "/proc/irq/$irq" ] && echo 8 > "/proc/irq/$irq/smp_affinity" 2>/dev/null
+    done
+
+    # 6. Enable Receive Packet Steering (RPS) across CPU 1, 2, 3 (Mask 0xE = 14)
+    # CPU 0 is kept responsive for management, LuCI web server, and userland commands
+    for rps in /sys/class/net/*/queues/rx-*/rps_cpus; do
+        [ -f "$rps" ] && echo "e" > "$rps" 2>/dev/null || true
+    done
+
+    # 7. Enable Transmit Packet Steering (XPS) across CPU 1, 2, 3 (Mask 0xE)
+    for xps in /sys/class/net/*/queues/tx-*/xps_cpus; do
+        [ -f "$xps" ] && echo "e" > "$xps" 2>/dev/null || true
+    done
+
+    # 8. Enable Flow Offloading in Firewall (Hardware PPE NAT Acceleration)
+    if [ -x /sbin/uci ]; then
+        local changed=0
+        if [ "$(uci -q get firewall.@defaults[0].flow_offloading)" != "1" ]; then
+            uci set firewall.@defaults[0].flow_offloading="1"
+            changed=1
+        fi
+        if [ "$(uci -q get firewall.@defaults[0].flow_offloading_hw)" != "1" ]; then
+            uci set firewall.@defaults[0].flow_offloading_hw="1"
+            changed=1
+        fi
+        if [ "$changed" = "1" ]; then
+            uci commit firewall
+            /etc/init.d/firewall reload 2>/dev/null || true
+        fi
+    fi
+
+    logger -t mercury-smp "MT7621AT Quad-Thread multi-core optimization applied successfully."
+}
+
+boot() {
+    start
+}
