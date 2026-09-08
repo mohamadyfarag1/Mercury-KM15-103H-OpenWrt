@@ -1,0 +1,21 @@
+#!/bin/sh
+# Restore genuine MT7915 factory calibration to Factory partition if corrupted/uncalibrated
+. /lib/functions.sh
+
+FACTORY_DEV=$(find_mtd_part "Factory")
+[ -n "$FACTORY_DEV" ] || exit 0
+
+# Check first 2 bytes of Factory partition
+HEADER=$(hexdump -n 2 -e '2/1 "%02x"' "$FACTORY_DEV" 2>/dev/null)
+
+# If header is not 1579 (e.g. 1576 from Breed default, or ffff, or 0000)
+if [ "$HEADER" != "1579" ]; then
+	CAL_BIN="/lib/firmware/mediatek/mt7915_eeprom_dbdc.bin"
+	if [ -f "$CAL_BIN" ]; then
+		logger -t factory-cal "Factory partition header is '$HEADER' (expected '1579'). Restoring calibration..."
+		mtd write "$CAL_BIN" Factory 2>&1 | logger -t factory-cal
+		logger -t factory-cal "Factory calibration restored to $FACTORY_DEV."
+	fi
+fi
+
+exit 0

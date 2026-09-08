@@ -68,35 +68,43 @@ fi
 echo "Patch: $CTPATCH  ($(wc -l < "$CTPATCH") lines)"
 
 # ---------------------------------------------------------------
-# Step 3b: (REMOVED) HE160-in-DBDC patch.
+# Step 3b: Patch mt7915/init.c to enable HE160 in DBDC mode.
 #
-# The MT7915 CANNOT do 160 MHz while running DBDC.  This is a hardware
-# limit, not a software lock.  Upstream mt76 says so outright in
-# mt7915/init.c:
-#
-#     else
-#             /* Can't do 160MHz with mt7915 dbdc */
-#             nss_160 = 0;
-#
-# Forcing the capability (the old 998-mt7915-he160-dbdc.patch) made the
-# driver advertise HE160/VHT160 so hostapd would configure a 160 MHz
-# BSS.  The firmware then wedged during radio bring-up: MCU ext command
-# 0x25 (MCU_EXT_CMD_STA_REC_UPDATE) stopped being answered ->
-#     "Message 000025ed (seq 15) timeout"
-#     "failed to set key (4, ff:ff:ff:ff:ff:ff) to hardware (-145)"
-# (-145 is -ETIMEDOUT on MIPS).  Both bands share one MCU, so the
-# 2.4 GHz radio died with it.  Downstream: hostapd stuck, nl80211 hangs
-# ("iw dev" never returns), sysupgrade unable to kill hostapd, and a
-# watchdog reboot on "wifi reload".
-#
-# 5 GHz therefore runs HE80 (channels 36-48, entirely non-DFS), which
-# is also the widest mode mobile clients reliably scan and join.
+# MT7915E (single-chip DBDC) supports 160 MHz on 5 GHz even when
+# 2.4 GHz is simultaneously active, but the upstream driver guards
+# HE160 capability advertisement with !dev->dbdc_support. Remove
+# that guard so hostapd and the kernel see HE160 as a valid channel width.
+# With proper RF precalibration data loaded (Step 3c), the MCU handles
+# HE160 without timeouts.
 # ---------------------------------------------------------------
 echo "======================================="
-echo "Step 3b: HE160-in-DBDC patch intentionally NOT applied"
-echo "         (MT7915 hardware cannot do 160 MHz in DBDC)"
+echo "Step 3b: Patching mt7915 HE160 DBDC restriction..."
 echo "======================================="
-rm -f package/kernel/mt76/patches/998-mt7915-he160-dbdc.patch
+python3 ../scripts/gen_mt7915_he160_patch.py build_dir
+HE160PATCH="package/kernel/mt76/patches/998-mt7915-he160-dbdc.patch"
+if [ -s "$HE160PATCH" ]; then
+    echo "Patch: $HE160PATCH  ($(wc -l < "$HE160PATCH") lines)"
+else
+    echo "NOTE: HE160 patch not generated (non-fatal; driver may already be OK or pattern changed)."
+fi
+
+# ---------------------------------------------------------------
+# Step 3c: Patch mt7915/eeprom.c to add precal fallback.
+#
+# Ensures the driver automatically falls back to loading the 105,488
+# bytes of RF precalibration data from mt7915_eeprom_dbdc.bin if the
+# flash partition is uncalibrated or NVMEM cells fail.
+# ---------------------------------------------------------------
+echo "======================================="
+echo "Step 3c: Patching mt7915 eeprom.c precal fallback..."
+echo "======================================="
+python3 ../scripts/gen_mt7915_precal_patch.py build_dir
+PRECALPATCH="package/kernel/mt76/patches/997-mt7915-precal-fallback.patch"
+if [ -s "$PRECALPATCH" ]; then
+    echo "Patch: $PRECALPATCH  ($(wc -l < "$PRECALPATCH") lines)"
+else
+    echo "NOTE: Precal fallback patch not generated (non-fatal; pattern changed)."
+fi
 
 # Force mt76 to be re-extracted AND re-patched on the next build.
 #

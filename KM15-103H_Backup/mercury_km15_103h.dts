@@ -363,7 +363,6 @@
       partition@100000 {
         label = "Factory";
         name = "partition";
-        read-only;
         reg = <0x100000 0x80000>;
         nvmem-layout {
           #address-cells = <0x1>;
@@ -638,6 +637,8 @@
         compatible = "mediatek,mt76";
         mediatek,disable-radar-background;
         name = "wifi";
+        nvmem-cell-names = "eeprom", "precal";
+        nvmem-cells = <0x1d 0x1e>;
         reg = <0x0 0x0 0x0 0x0 0x0>;
         band@0 {
           mac-address = [0c 96 cd 9f cb 1b];
