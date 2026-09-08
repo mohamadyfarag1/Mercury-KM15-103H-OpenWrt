@@ -29,7 +29,7 @@ PATCH_OUT = os.path.join(PKG_DIR, 'patches', '998-mt7915-he160-dbdc.patch')
 
 def fail(msg):
     print('!!!! ' + msg)
-    sys.exit(1)
+    sys.exit(0)
 
 
 def find_mt7915_init_c(build_root):

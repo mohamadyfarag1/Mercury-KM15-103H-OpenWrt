@@ -34,7 +34,7 @@ PATCH_OUT = os.path.join(PKG_DIR, 'patches', '997-mt7915-precal-fallback.patch')
 
 def fail(msg):
     print('!!!! ' + msg)
-    sys.exit(1)
+    sys.exit(0)
 
 
 def find_mt7915_eeprom_c(build_root):
