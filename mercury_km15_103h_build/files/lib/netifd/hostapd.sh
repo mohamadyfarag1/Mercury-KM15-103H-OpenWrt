@@ -1441,6 +1441,24 @@ wpa_supplicant_add_network() {
 	[ "$_w_mode" = "sta" ] && {
 		[ "$multi_ap" = 1 ] && append network_data "multi_ap_backhaul_sta=1" "$N$T"
 		[ "$default_disabled" = 1 ] && append network_data "disabled=1" "$N$T"
+
+		# Mercury: pin the station scan to the frequencies the link is
+		# supposed to use. If scan_list/freq_list is not specified,
+		# provide the full spectrum of SuperChannels.
+		local sl_list= sf_list=
+		json_get_var sl_list scan_list
+		[ -z "$sl_list" ] && json_get_var sl_list freq_list
+		if [ -z "$sl_list" ]; then
+			if [ -n "$freq" ] && [ "$freq" -ge 5000 ]; then
+				sl_list="$(seq 5100 5 6100)"
+			elif [ -n "$freq" ] && [ "$freq" -lt 3000 ]; then
+				sl_list="$(seq 2312 5 2732)"
+			else
+				sl_list="$(seq 5100 5 6100)"
+			fi
+		fi
+		[ -n "$sl_list" ] && append network_data "scan_freq=$(echo $sl_list | tr ' ' ',')" "$N$T"
+		[ -n "$sl_list" ] && append network_data "freq_list=$(echo $sl_list | tr ' ' ' ')" "$N$T"
 	}
 
 	[ -n "$ocv" ] && append network_data "ocv=$ocv" "$N$T"
