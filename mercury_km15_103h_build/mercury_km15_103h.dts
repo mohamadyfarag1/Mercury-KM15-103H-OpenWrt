@@ -13,8 +13,8 @@
     serial0 = "/palmbus@1e000000/uartlite@c00";
   };
   chosen {
-    bootargs = "console=ttyS0,57600";
-    bootargs-override = "console=ttyS0,115200";
+    bootargs = "console=ttyS0,115200 ubi.mtd=ubi root=/dev/ubiblock0_0";
+    bootargs-override = "console=ttyS0,115200 ubi.mtd=ubi root=/dev/ubiblock0_0";
     name = "chosen";
   };
   cpc@1fbf0000 {
