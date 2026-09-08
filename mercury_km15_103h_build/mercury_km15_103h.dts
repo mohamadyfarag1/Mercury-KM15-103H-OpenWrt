@@ -633,8 +633,6 @@
         compatible = "mediatek,mt76";
         mediatek,disable-radar-background;
         name = "wifi";
-        nvmem-cell-names = "eeprom", "precal";
-        nvmem-cells = <0x1d 0x1e>;
         reg = <0x0 0x0 0x0 0x0 0x0>;
         band@0 {
           name = "band";
