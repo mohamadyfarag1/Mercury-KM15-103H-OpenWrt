@@ -1,0 +1,53 @@
+#!/bin/sh
+
+uci batch << "EOF"
+set system.led_lan1=led
+set system.led_lan1.name='LAN1'
+set system.led_lan1.sysfs='green:lan1'
+set system.led_lan1.trigger='netdev'
+set system.led_lan1.dev='lan1'
+set system.led_lan1.mode='link tx rx'
+set system.led_lan1.default='0'
+
+set system.led_lan2=led
+set system.led_lan2.name='LAN2'
+set system.led_lan2.sysfs='green:lan2'
+set system.led_lan2.trigger='netdev'
+set system.led_lan2.dev='lan2'
+set system.led_lan2.mode='link tx rx'
+set system.led_lan2.default='0'
+
+set system.led_lan3=led
+set system.led_lan3.name='LAN3'
+set system.led_lan3.sysfs='green:lan3'
+set system.led_lan3.trigger='netdev'
+set system.led_lan3.dev='lan3'
+set system.led_lan3.mode='link tx rx'
+set system.led_lan3.default='0'
+
+set system.led_lan4=led
+set system.led_lan4.name='LAN4'
+set system.led_lan4.sysfs='green:lan4'
+set system.led_lan4.trigger='netdev'
+set system.led_lan4.dev='lan4'
+set system.led_lan4.mode='link tx rx'
+set system.led_lan4.default='0'
+
+set system.led_wan=led
+set system.led_wan.name='WAN'
+set system.led_wan.sysfs='green:wan'
+set system.led_wan.trigger='netdev'
+set system.led_wan.dev='wan'
+set system.led_wan.mode='link tx rx'
+set system.led_wan.default='0'
+
+set system.led_wlan=led
+set system.led_wlan.name='WLAN'
+set system.led_wlan.sysfs='green:wlan2'
+set system.led_wlan.trigger='phy0tpt'
+set system.led_wlan.default='0'
+
+commit system
+EOF
+
+exit 0
