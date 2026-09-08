@@ -1,0 +1,29 @@
+#!/bin/sh
+# =====================================================================
+# Mercury KM15-103H Port Control CGI handler
+# =====================================================================
+echo "Content-Type: application/json"
+echo ""
+
+case "$REQUEST_METHOD" in
+    GET|POST)
+        action=$(echo "$QUERY_STRING" | grep -o 'action=[^&]*' | cut -d= -f2)
+        port=$(echo "$QUERY_STRING" | grep -o 'port=[^&]*' | cut -d= -f2)
+        radio=$(echo "$QUERY_STRING" | grep -o 'radio=[^&]*' | cut -d= -f2)
+
+        if [ "$action" = "status" ]; then
+            /usr/bin/port_control status
+        elif [ "$action" = "toggle_wifi" ] && [ -n "$radio" ]; then
+            res=$(/usr/bin/port_control toggle_wifi "$radio" 2>&1)
+            echo "{\"result\": \"ok\", \"message\": \"$res\"}"
+        elif [ -n "$port" ] && [ -n "$action" ]; then
+            res=$(/usr/bin/port_control set "$port" "$action" 2>&1)
+            echo "{\"result\": \"ok\", \"message\": \"$res\"}"
+        else
+            echo '{"result": "error", "message": "missing params"}'
+        fi
+        ;;
+    *)
+        echo '{"result": "error", "message": "method not allowed"}'
+        ;;
+esac

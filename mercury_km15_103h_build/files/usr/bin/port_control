@@ -1,0 +1,275 @@
+#!/bin/sh
+# =====================================================================
+# Mercury KM15-103H LAN & Wireless Port Control Engine
+# Hardware: MediaTek MT7621AT + MT7530 DSA Switch + MT7915E Wi-Fi 6
+# =====================================================================
+
+STATE_DIR="/etc/horus/disabled_ports"
+mkdir -p "$STATE_DIR"
+
+get_wifi_temp() {
+    local radio="$1"
+    local phy="phy0"
+    [ "$radio" = "radio1" ] && phy="phy1"
+
+    # 1. Direct match on MediaTek mt7915_phy0 / mt7915_phy1 hwmon name
+    for h in /sys/class/hwmon/hwmon*; do
+        [ -d "$h" ] || continue
+        hname=$(cat "$h/name" 2>/dev/null)
+        if [ "$hname" = "mt7915_${phy}" ] || [ "$hname" = "${phy}" ]; then
+            if [ -f "$h/temp1_input" ]; then
+                val=$(cat "$h/temp1_input" 2>/dev/null)
+                if [ -n "$val" ] && [ "$val" -gt 0 ]; then
+                    echo $(( val / 1000 ))
+                    return 0
+                fi
+            fi
+        fi
+    done
+
+    # 2. Match hwmon symlink target containing the phy name
+    for h in /sys/class/hwmon/hwmon*; do
+        [ -d "$h" ] || continue
+        target=$(readlink -f "$h" 2>/dev/null || readlink "$h" 2>/dev/null)
+        case "$target" in
+            *"$phy"*)
+                if [ -f "$h/temp1_input" ]; then
+                    val=$(cat "$h/temp1_input" 2>/dev/null)
+                    if [ -n "$val" ] && [ "$val" -gt 0 ]; then
+                        echo $(( val / 1000 ))
+                        return 0
+                    fi
+                fi
+                ;;
+        esac
+    done
+
+    # 3. Direct ieee80211 phy path
+    for p in "/sys/class/ieee80211/$phy/device/hwmon/hwmon"*/temp1_input \
+             "/sys/class/ieee80211/$phy/hwmon/hwmon"*/temp1_input; do
+        if [ -f "$p" ]; then
+            val=$(cat "$p" 2>/dev/null)
+            if [ -n "$val" ] && [ "$val" -gt 0 ]; then
+                echo $(( val / 1000 ))
+                return 0
+            fi
+        fi
+    done
+
+    # 4. Search hwmon by driver/chipset name
+    for h in /sys/class/hwmon/hwmon*; do
+        [ -d "$h" ] || continue
+        hname=$(cat "$h/name" 2>/dev/null)
+        case "$hname" in
+            *mt7915*|*mt76*|*ath10k*|*qcom*|*wifi*)
+                if [ -f "$h/temp1_input" ]; then
+                    val=$(cat "$h/temp1_input" 2>/dev/null)
+                    if [ -n "$val" ] && [ "$val" -gt 0 ]; then
+                        echo $(( val / 1000 ))
+                        return 0
+                    fi
+                fi
+                ;;
+        esac
+    done
+
+    # 5. Thermal zones
+    for tz in /sys/class/thermal/thermal_zone*; do
+        [ -d "$tz" ] || continue
+        ttype=$(cat "$tz/type" 2>/dev/null)
+        case "$ttype" in
+            *$phy*|*mt7915*|*wifi*)
+                val=$(cat "$tz/temp" 2>/dev/null)
+                if [ -n "$val" ] && [ "$val" -gt 0 ]; then
+                    echo $(( val / 1000 ))
+                    return 0
+                fi
+                ;;
+        esac
+    done
+
+    # 6. Fallback to SoC thermal zone 0
+    if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
+        val=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
+        if [ -n "$val" ] && [ "$val" -gt 0 ]; then
+            echo $(( val / 1000 ))
+            return 0
+        fi
+    fi
+
+    echo 0
+}
+
+port_status() {
+    # Print JSON status of all ethernet and wireless ports
+    echo "{"
+    echo '  "ports": {'
+
+    first=1
+    for p in lan1 lan2 lan3 lan4 wan; do
+        [ "$first" = "1" ] && first=0 || echo ","
+        
+        is_disabled=0
+        [ -f "$STATE_DIR/$p" ] && is_disabled=1
+
+        carrier=0
+        speed=0
+        duplex=""
+        operstate="down"
+
+        if [ -d "/sys/class/net/$p" ]; then
+            operstate=$(cat "/sys/class/net/$p/operstate" 2>/dev/null || echo "down")
+            carrier=$(cat "/sys/class/net/$p/carrier" 2>/dev/null || echo 0)
+            [ "$carrier" = "1" ] || carrier=0
+            if [ "$carrier" = "1" ]; then
+                speed=$(cat "/sys/class/net/$p/speed" 2>/dev/null || echo 0)
+                duplex=$(cat "/sys/class/net/$p/duplex" 2>/dev/null || echo "")
+            else
+                speed=0
+                duplex=""
+            fi
+        fi
+
+        printf '    "%s": {"disabled": %d, "carrier": %s, "speed": %s, "duplex": "%s", "operstate": "%s"}' \
+            "$p" "$is_disabled" "$carrier" "$speed" "$duplex" "$operstate"
+    done
+    echo ""
+    echo '  },'
+
+    # Wireless status
+    echo '  "wireless": {'
+    first_w=1
+    for r in radio0 radio1; do
+        [ "$first_w" = "1" ] && first_w=0 || echo ","
+
+        r_disabled=$(uci -q get "wireless.${r}.disabled" || echo 0)
+        r_channel=$(uci -q get "wireless.${r}.channel" || echo "auto")
+        r_htmode=$(uci -q get "wireless.${r}.htmode" || echo "")
+        
+        # Find matching interface
+        iface_name=""
+        ssid=""
+        mode="ap"
+        clients=0
+
+        for ifc in $(uci show wireless 2>/dev/null | grep "=wifi-iface" | cut -d. -f2 | cut -d= -f1); do
+            dev=$(uci -q get "wireless.${ifc}.device")
+            if [ "$dev" = "$r" ]; then
+                ssid=$(uci -q get "wireless.${ifc}.ssid" || echo "")
+                mode=$(uci -q get "wireless.${ifc}.mode" || echo "ap")
+                iface_name=$(uci -q get "wireless.${ifc}.ifname" || echo "")
+                break
+            fi
+        done
+
+        # If iface_name not set in UCI, check iw dev or fallback to standard name
+        if [ -z "$iface_name" ]; then
+            phy_idx=0
+            [ "$r" = "radio1" ] && phy_idx=1
+            iface_name=$(iw dev 2>/dev/null | grep -A2 "phy#${phy_idx}" | grep Interface | awk '{print $2}' | head -n1)
+            [ -z "$iface_name" ] && iface_name="phy${phy_idx}-ap0"
+        fi
+
+        # Count stations safely
+        if [ -n "$iface_name" ] && [ -d "/sys/class/net/$iface_name" ]; then
+            clients=$(iw dev "$iface_name" station dump 2>/dev/null | grep -c "^Station")
+            clients=${clients:-0}
+        fi
+
+        r_temp=$(get_wifi_temp "$r")
+
+        printf '    "%s": {"disabled": %s, "channel": "%s", "htmode": "%s", "ssid": "%s", "mode": "%s", "ifname": "%s", "clients": %d, "temp": %d}' \
+            "$r" "$r_disabled" "$r_channel" "$r_htmode" "$ssid" "$mode" "$iface_name" "$clients" "$r_temp"
+    done
+    echo ""
+    echo '  }'
+    echo "}"
+}
+
+set_port() {
+    local port="$1"
+    local action="$2"
+
+    [ -n "$port" ] || exit 1
+
+    case "$action" in
+        down|disable)
+            logger -t km15-port "Disabling Ethernet port $port"
+            ip link set dev "$port" down 2>/dev/null
+            touch "$STATE_DIR/$port"
+            echo "OK: $port is disabled"
+            ;;
+        up|enable)
+            logger -t km15-port "Enabling Ethernet port $port"
+            rm -f "$STATE_DIR/$port"
+            ip link set dev "$port" up 2>/dev/null
+            echo "OK: $port is enabled"
+            ;;
+        toggle)
+            if [ -f "$STATE_DIR/$port" ]; then
+                set_port "$port" "up"
+            else
+                set_port "$port" "down"
+            fi
+            ;;
+        *)
+            echo "Usage: port_control set <port> <up|down|toggle>"
+            exit 1
+            ;;
+    esac
+}
+
+toggle_wifi() {
+    local radio="$1"
+    [ -n "$radio" ] || exit 1
+
+    local curr
+    curr=$(uci -q get "wireless.${radio}.disabled" || echo 0)
+
+    if [ "$curr" = "1" ]; then
+        logger -t km15-wifi "Enabling wireless radio $radio"
+        uci set "wireless.${radio}.disabled=0"
+        uci commit wireless
+        wifi reload "$radio" 2>/dev/null || wifi reload
+        echo "OK: $radio enabled"
+    else
+        logger -t km15-wifi "Disabling wireless radio $radio"
+        uci set "wireless.${radio}.disabled=1"
+        uci commit wireless
+        wifi reload "$radio" 2>/dev/null || wifi reload
+        echo "OK: $radio disabled"
+    fi
+}
+
+restore_ports() {
+    # Called on boot to re-apply any disabled ports
+    for f in "$STATE_DIR"/*; do
+        [ -f "$f" ] || continue
+        port="${f##*/}"
+        [ -n "$port" ] || continue
+        logger -t km15-port "Restoring disabled state for $port"
+        ip link set dev "$port" down 2>/dev/null
+    done
+}
+
+case "$1" in
+    status)
+        port_status
+        ;;
+    set)
+        set_port "$2" "$3"
+        ;;
+    toggle)
+        set_port "$2" "toggle"
+        ;;
+    toggle_wifi)
+        toggle_wifi "$2"
+        ;;
+    restore)
+        restore_ports
+        ;;
+    *)
+        echo "Usage: port_control {status|set <port> <up|down>|toggle <port>|toggle_wifi <radio>|restore}"
+        exit 1
+        ;;
+esac

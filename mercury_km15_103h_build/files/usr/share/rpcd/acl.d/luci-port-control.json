@@ -1,0 +1,18 @@
+{
+	"luci-port-control": {
+		"description": "Grant access to Mercury KM15 LAN and Wireless port control",
+		"read": {
+			"uci": [ "network", "wireless" ],
+			"file": {
+				"/etc/horus/disabled_ports/*": [ "read" ],
+				"/usr/bin/port_control": [ "exec" ]
+			}
+		},
+		"write": {
+			"uci": [ "network", "wireless" ],
+			"file": {
+				"/usr/bin/port_control": [ "exec" ]
+			}
+		}
+	}
+}

@@ -1,0 +1,11 @@
+#!/bin/sh /etc/rc.common
+# Mercury KM15-103H LAN Port Control State Restorer
+START=99
+
+boot() {
+    /usr/bin/port_control restore
+}
+
+start() {
+    /usr/bin/port_control restore
+}

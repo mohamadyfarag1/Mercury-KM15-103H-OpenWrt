@@ -1,0 +1,18 @@
+{
+	"luci-mod-status": {
+		"read": {
+			"uci": [ "network", "wireless" ],
+			"file": {
+				"/etc/horus/disabled_ports": [ "list" ],
+				"/etc/horus/disabled_ports/*": [ "read" ],
+				"/usr/bin/port_control": [ "exec" ]
+			}
+		},
+		"write": {
+			"uci": [ "network", "wireless" ],
+			"file": {
+				"/usr/bin/port_control": [ "exec" ]
+			}
+		}
+	}
+}

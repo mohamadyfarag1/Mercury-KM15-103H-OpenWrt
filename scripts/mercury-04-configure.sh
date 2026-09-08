@@ -16,6 +16,7 @@ find files/usr/sbin -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/etc/init.d -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/etc/uci-defaults -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/lib -type f -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
+find files/www/cgi-bin -type f -exec chmod +x {} \; 2>/dev/null || true
 
 # Guarantee pre-compressed wireless.js.gz exists in overlay
 if [ -f files/www/luci-static/resources/view/network/wireless.js ]; then
@@ -29,6 +30,20 @@ if [ -d "$LUCI_NET_DIR" ]; then
     cp -f files/www/luci-static/resources/view/network/wireless.js "$LUCI_NET_DIR/wireless.js"
     [ -f files/www/luci-static/resources/view/network/wireless.js.gz ] && \
         cp -f files/www/luci-static/resources/view/network/wireless.js.gz "$LUCI_NET_DIR/wireless.js.gz" 2>/dev/null || true
+fi
+
+# Guarantee pre-compressed 29_ports.js.gz exists in overlay
+if [ -f files/www/luci-static/resources/view/status/include/29_ports.js ]; then
+    gzip -9kf files/www/luci-static/resources/view/status/include/29_ports.js 2>/dev/null || true
+fi
+
+# Inject custom 29_ports.js into feeds/luci source tree
+LUCI_STATUS_DIR="feeds/luci/modules/luci-mod-status/htdocs/luci-static/resources/view/status/include"
+if [ -d "$LUCI_STATUS_DIR" ]; then
+    echo "Injecting port-control 29_ports.js into feeds/luci..."
+    cp -f files/www/luci-static/resources/view/status/include/29_ports.js "$LUCI_STATUS_DIR/29_ports.js"
+    [ -f files/www/luci-static/resources/view/status/include/29_ports.js.gz ] && \
+        cp -f files/www/luci-static/resources/view/status/include/29_ports.js.gz "$LUCI_STATUS_DIR/29_ports.js.gz" 2>/dev/null || true
 fi
 
 # Inject custom hostapd.sh into wifi-scripts package tree
