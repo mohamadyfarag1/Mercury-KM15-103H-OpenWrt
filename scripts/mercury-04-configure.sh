@@ -93,7 +93,7 @@ cat << 'EOF' > package/network/services/hostapd/patches/999-mercury-superchannel
  			return NUM_HOSTAPD_MODES;
 @@ -1650,4 +1677,4 @@ enum hostapd_hw_mode
 -	if (freq >= 5000 && freq < 5900) {
-+	if (freq >= 5000 && freq <= 6100 && freq != 5935) {
++	if (freq >= 5000 && freq <= 6110 && freq != 5935) {
  		if ((freq - 5000) % 5)
  			return NUM_HOSTAPD_MODES;
  		*channel = (freq - 5000) / 5;

@@ -1450,11 +1450,11 @@ wpa_supplicant_add_network() {
 		[ -z "$sl_list" ] && json_get_var sl_list freq_list
 		if [ -z "$sl_list" ]; then
 			if [ -n "$freq" ] && [ "$freq" -ge 5000 ]; then
-				sl_list="$(seq 5100 5 6100)"
+				sl_list="$(seq 5100 5 6110)"
 			elif [ -n "$freq" ] && [ "$freq" -lt 3000 ]; then
 				sl_list="$(seq 2312 5 2732)"
 			else
-				sl_list="$(seq 5100 5 6100)"
+				sl_list="$(seq 5100 5 6110)"
 			fi
 		fi
 		[ -n "$sl_list" ] && append network_data "scan_freq=$(echo $sl_list | tr ' ' ',')" "$N$T"

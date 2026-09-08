@@ -44,7 +44,7 @@ make package/kernel/mt76/prepare V=s -j"$(nproc)"   2>&1 || true
 # The stock mt76 table has ~28 channels at 20 MHz spacing.
 # gen_mt76_patch.py finds the prepared mac80211.c in build_dir,
 # replaces the array with 177 channels at 5 MHz spacing
-# (ch20-220, 5100-6100 MHz), generates a unified diff, and drops
+# (ch20-222, 5100-6110 MHz), generates a unified diff, and drops
 # it into package/kernel/mt76/patches/ so OpenWrt applies it
 # during Build/Prepare for every future rebuild. Then we clean
 # mt76 so the full build re-prepares it from the patched source.
@@ -55,7 +55,7 @@ make package/kernel/mt76/prepare V=s -j"$(nproc)"   2>&1 || true
 # for why it is opt-in rather than always on.
 # ---------------------------------------------------------------
 echo "======================================="
-echo "Step 3: Extending mt76 channel table to 177 channels (5100-6100 MHz)..."
+echo "Step 3: Extending mt76 channel table to 177 channels (5100-6110 MHz)..."
 echo "======================================="
 echo "MERCURY_ENABLE_23GHZ = '${MERCURY_ENABLE_23GHZ:-(unset - 2.3 GHz disabled)}'"
 python3 ../scripts/gen_mt76_patch.py build_dir
@@ -162,10 +162,10 @@ if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     if [ -n "$FAILED" ]; then
         for pkg in $FAILED; do
             echo "##### $pkg #####"
-            find "logs/$pkg" -name '*.txt' 2>/dev/null | while read -r L; do
-                echo "----- $L (last 80 lines) -----"
-                tail -n 80 "$L"
-            done
+            # Since CONFIG_BUILD_LOG is not always set, logs/ might be empty.
+            # We will force a re-compile of the failed package with V=s to get the error on stdout!
+            echo "Re-compiling $pkg with V=s to capture the exact compiler error..."
+            make "$pkg/compile" V=s -j1
         done
     else
         echo "(no 'ERROR: <pkg> failed to build' line; tail of build.log:)"
