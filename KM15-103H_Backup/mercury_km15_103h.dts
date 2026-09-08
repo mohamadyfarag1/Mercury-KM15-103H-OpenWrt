@@ -307,7 +307,7 @@
       function = "wlan-2ghz";
       gpios = <0x1b 0xd 0x1>;
       label = "green:wlan2";
-      linux,default-trigger = "phy0-ap0";
+      linux,default-trigger = "phy0tpt";
       name = "wlan2_green";
     };
   };
