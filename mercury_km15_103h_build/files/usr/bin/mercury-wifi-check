@@ -110,7 +110,7 @@ for PHYPATH in /sys/class/ieee80211/*; do
     fi
 
     # 5 GHz sanity: this build ships the stock standard channel plan
-    # (5170-5835 MHz), so roughly 25-30 channels is correct. A count far
+    # (5170-5885 MHz), so roughly 25-30 channels is correct. A count far
     # above that means a superchannel table got back into the driver -
     # those channels have no EEPROM calibration on the MT7915E and
     # hostapd refuses them at bring-up ("Could not select hw_mode and

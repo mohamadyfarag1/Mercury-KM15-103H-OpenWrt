@@ -65,11 +65,16 @@ with open('db.txt', 'w') as f:
         #   2402-2482  : 2.4 GHz ch1-13
         #   5170-5330  : UNII-1 + UNII-2A, ch36-64
         #   5490-5730  : UNII-2C, ch100-144
-        #   5735-5835  : UNII-3, ch149-165
+        #   5735-5895  : UNII-3 + UNII-4, ch149-177
+        # The top rule reaches 5895, not 5835, because the stock mt76 5 GHz
+        # table ends at ch177 (5885 MHz): ch169/173/177 are in the driver's
+        # standard table, so the database has to grant them or Step 6 in
+        # mercury-05 rejects them as off-plan dead channels. ch177 at 5885
+        # needs its 20 MHz to fit, so the edge is 5885 + 10 = 5895.
         f.write('\t(2402 - 2482 @ 40), (30)\n')
         f.write('\t(5170 - 5330 @ 160), (30)\n')
         f.write('\t(5490 - 5730 @ 160), (30)\n')
-        f.write('\t(5735 - 5835 @ 80), (30)\n')
+        f.write('\t(5735 - 5895 @ 80), (30)\n')
         f.write('\n')
 print('Generated db.txt with %d countries' % len(countries))
 PYEOF

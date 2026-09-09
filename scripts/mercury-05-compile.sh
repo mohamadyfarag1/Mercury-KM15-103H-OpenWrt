@@ -259,16 +259,19 @@ if [ "${CHAN5G_COUNT:-0}" -gt 60 ]; then
 fi
 
 # The count alone would not catch a table that kept 28 entries but moved
-# them off-plan, so check the actual frequencies too. Anything below
-# 5170 or above 5835 is outside the regulatory rules Step 1 generates and
-# would be disabled by cfg80211 the moment it was selected.
+# them off-plan, so check the actual frequencies too. The bounds are the
+# stock mt76 5 GHz table's own edges: 5170 (ch36) at the bottom, 5885
+# (ch177) at the top. The custom regdb in Step 1 grants exactly this span,
+# so anything outside it would be disabled by cfg80211 on selection. The
+# superchannel table this guards against had entries at 5100 and 6000+,
+# well past both edges.
 OFFPLAN=$(grep -oE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" \
     | grep -oE '[0-9]+\)$' | tr -d ')' \
-    | awk '$1 < 5170 || $1 > 5835' | sort -u | tr '\n' ' ')
+    | awk '$1 < 5170 || $1 > 5885' | sort -u | tr '\n' ' ')
 if [ -n "$OFFPLAN" ]; then
     echo "!!!! mt76 exposes 5 GHz frequencies outside the standard plan: $OFFPLAN"
-    echo "     The regulatory database only grants 5170-5330, 5490-5730 and"
-    echo "     5735-5835 MHz, so these would be dead channels on the device."
+    echo "     The regulatory database grants 5170-5330, 5490-5730 and"
+    echo "     5735-5895 MHz, so these would be dead channels on the device."
     exit 1
 fi
 
@@ -713,7 +716,7 @@ if [ -n "$GITHUB_STEP_SUMMARY" ]; then
         echo "Flash \`*-squashfs-sysupgrade.bin\` **without** \"Keep settings\","
         echo "then run \`mercury-wifi-check\` over SSH to confirm the radios came up."
         echo
-        echo "mt76 channel table: **$CHAN5G_COUNT channels** (standard plan, 5170-5835 MHz)"
+        echo "mt76 channel table: **$CHAN5G_COUNT channels** (standard plan, 5170-5885 MHz)"
         echo
         echo "5 GHz runs HE80. The MT7915 shares one MCU between both bands and"
         echo "cannot do 160 MHz while 2.4 GHz is up, so HE160 stays off."
