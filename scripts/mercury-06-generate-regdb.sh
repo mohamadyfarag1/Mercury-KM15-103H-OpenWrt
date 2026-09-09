@@ -25,6 +25,15 @@ fi
 cd wireless-regdb
 
 python3 - <<'PYEOF'
+import os
+
+# 2.3 GHz is opt-in. When MERCURY_ENABLE_23GHZ is set the 2.4 GHz rule floor
+# drops from 2402 to 2302 so ch-19 (2312 MHz) has room for its 20 MHz
+# (2302-2322). Off by default - the standard rule starts at 2402.
+_e = os.environ.get('MERCURY_ENABLE_23GHZ', '').strip().lower()
+ENABLE_23G = _e not in ('', '0', 'no', 'false', 'disable')
+GHZ24_FLOOR = 2302 if ENABLE_23G else 2402
+
 countries = [
     '00',
     'AD','AE','AF','AL','AM','AN','AR','AT','AU','AW','AZ',
@@ -74,12 +83,13 @@ with open('db.txt', 'w') as f:
         # is a channel EDGE, never a channel centre.
         # The top rule reaches 5895 because the stock mt76 table ends at
         # ch177 (5885 MHz); ch177's 20 MHz needs 5885 + 10 = 5895.
-        f.write('\t(2402 - 2482 @ 40), (30)\n')
+        f.write('\t(%d - 2482 @ 40), (30)\n' % GHZ24_FLOOR)
         f.write('\t(5140 - 5330 @ 160), (30)\n')
         f.write('\t(5490 - 5730 @ 160), (30)\n')
         f.write('\t(5735 - 5895 @ 80), (30)\n')
         f.write('\n')
-print('Generated db.txt with %d countries' % len(countries))
+print('Generated db.txt with %d countries (2.4 GHz floor %d MHz, 2.3 GHz %s)'
+      % (len(countries), GHZ24_FLOOR, 'ON' if ENABLE_23G else 'off'))
 PYEOF
 
 openssl ecparam -name prime256v1 -genkey -noout -out key.priv.pem

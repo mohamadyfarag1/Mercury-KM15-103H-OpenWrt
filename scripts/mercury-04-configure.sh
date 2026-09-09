@@ -64,6 +64,43 @@ fi
 # failure later, so it is removed rather than disabled.
 rm -f package/network/services/hostapd/patches/999-mercury-superchannels.patch
 
+# EXPERIMENTAL 2.3 GHz (opt-in, MERCURY_ENABLE_23GHZ): stock hostapd's
+# ieee80211_freq_to_channel_ext() only knows 2412-2472/2484 on 2.4 GHz, so
+# it rejects 2312-2402 in AP mode. This teaches it the sub-2.4 GHz range.
+# Only 2.3 GHz - the 5 GHz side stays standard, unlike the old superchannel
+# patch. Written only when the flag is set, so the stable build never gets
+# it. Frequencies 2312-2402 map to op_class 81 / HOSTAPD_MODE_IEEE80211G.
+case "${MERCURY_ENABLE_23GHZ:-}" in
+    ''|0|no|false|disable)
+        echo "2.3 GHz hostapd mapping: disabled (MERCURY_ENABLE_23GHZ unset)" ;;
+    *)
+        echo "2.3 GHz hostapd mapping: ENABLED (experimental)"
+        mkdir -p package/network/services/hostapd/patches
+        cat << 'EOF' > package/network/services/hostapd/patches/994-mercury-23ghz.patch
+--- a/src/common/ieee802_11_common.c
++++ b/src/common/ieee802_11_common.c
+@@ -1519,6 +1519,15 @@ enum hostapd_hw_mode
+ 	if (sec_channel > 1 || sec_channel < -1)
+ 		return NUM_HOSTAPD_MODES;
+
++	/* Mercury EXPERIMENTAL: 2.3 GHz (2312 - 2402 MHz).
++	 * Sub-2.4 GHz channels are negative on the 2407 + n*5 grid, so map
++	 * them to op_class 81 as 11g. Uncalibrated - see gen_mt7915_23ghz. */
++	if (freq >= 2312 && freq <= 2402) {
++		if ((freq - 2312) % 5)
++			return NUM_HOSTAPD_MODES;
++		*channel = (freq - 2407) / 5;
++		*op_class = 81;
++		return HOSTAPD_MODE_IEEE80211G;
++	}
++
+ 	if (freq >= 2412 && freq <= 2472) {
+ 		if ((freq - 2407) % 5)
+ 			return NUM_HOSTAPD_MODES;
+EOF
+        echo "  wrote 994-mercury-23ghz.patch (hostapd)" ;;
+esac
+
 
 echo "Writing target .config for Mercury KM15-103H..."
 cat << 'EOF' > .config

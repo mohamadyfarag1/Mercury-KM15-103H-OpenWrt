@@ -150,6 +150,39 @@ if [ ! -s "$LOWCHANPATCH" ]; then
 fi
 echo "Patch: $LOWCHANPATCH  ($(wc -l < "$LOWCHANPATCH") lines)"
 
+# ---------------------------------------------------------------
+# Step 3e: EXPERIMENTAL 2.3 GHz channels (opt-in, MERCURY_ENABLE_23GHZ).
+#
+# Adds ch-19..-1 (2312-2402 MHz) to the 2 GHz table so the 2.4 GHz radio
+# can be tuned below the standard band and run HE (ax) there. This is a
+# gamble on the RF front end - the PA, band-pass filter and antenna match
+# are built for 2.4 GHz and there is no calibration below it, so these may
+# radiate weakly or not at all, and the MCU may reject them. OFF unless
+# MERCURY_ENABLE_23GHZ is set, so the stable build never carries it.
+# The kernel signed-channel cast (Step 4b) and the hostapd 2.3 GHz mapping
+# (mercury-04) and the regdb 2.3 GHz grant (mercury-06) are gated on the
+# same flag.
+# ---------------------------------------------------------------
+ENABLE_23G="${MERCURY_ENABLE_23GHZ:-}"
+case "$ENABLE_23G" in
+    ''|0|no|false|disable)
+        echo "Step 3e: 2.3 GHz disabled (set MERCURY_ENABLE_23GHZ=1 to include)."
+        ENABLE_23G="" ;;
+    *)
+        echo "======================================="
+        echo "Step 3e: EXPERIMENTAL 2.3 GHz channels (2312-2402 MHz)..."
+        echo "======================================="
+        python3 ../scripts/gen_mt7915_23ghz_patch.py build_dir
+        C23PATCH="package/kernel/mt76/patches/994-mt7915-23ghz.patch"
+        if [ ! -s "$C23PATCH" ]; then
+            echo "!!!! 2.3 GHz patch requested but not generated."
+            exit 1
+        fi
+        echo "Patch: $C23PATCH  ($(wc -l < "$C23PATCH") lines)"
+        echo "NOTE: 2.3 GHz is UNCALIBRATED - measure power on the device."
+        ENABLE_23G="1" ;;
+esac
+
 # The fallback reads precal out of mt7915_eeprom_dbdc.bin at offset 0xe10,
 # so that blob has to carry the calibration and not just the 3,584-byte
 # EEPROM image. 0xe10 + 105488 = 109088 bytes is the whole thing. A short
@@ -216,6 +249,63 @@ echo "OK: mt76 prepared source removed; Step 5 will re-extract from the tarball.
 #         (5170 - 5330 @ 160), (N/A, 30), (N/A)
 # so the regex surgery buys nothing and its failure mode (a desynchronised
 # brace in kernel source) is far worse than the fallback it guarded.
+# ---------------------------------------------------------------
+
+# ---------------------------------------------------------------
+# Step 4b: kernel signed-channel cast (only with 2.3 GHz enabled).
+#
+# ieee80211_channel_to_frequency() maps a 2 GHz channel with 2407 + chan*5.
+# Channels below 1 are negative, but when a channel number arrives as an
+# unsigned byte (e.g. -19 -> 0xED = 237) the arithmetic lands far above the
+# band. Reinterpreting it as signed (chan = (int)(char)chan;) fixes the
+# mapping back onto 2312-2402. With 2.3 GHz off every 2 GHz channel is
+# 1-14, the cast is a no-op, and the file is left untouched.
+#
+# Python, not sed: 'sed a\t\ttext' does not insert two tabs (GNU sed eats
+# the first backslash and emits a stray 't'). Patches both the kernel tree
+# and the mac80211 backports copy. The kernel tree is prepared in Step 2
+# and not removed (only mt76 is), so this in-place edit reaches Step 5.
+# ---------------------------------------------------------------
+if [ -n "$ENABLE_23G" ]; then
+    echo "======================================="
+    echo "Step 4b: kernel signed-channel cast for 2.3 GHz (util.c)..."
+    echo "======================================="
+    CAST_HITS=0
+    for UTIL in $(find build_dir -path "*/net/wireless/util.c" 2>/dev/null); do
+        if python3 - "$UTIL" <<'PYEOF'
+import sys
+path = sys.argv[1]
+with open(path, encoding='utf-8', errors='ignore') as fh:
+    lines = fh.readlines()
+MARK = 'chan = (int)(char)chan;'
+if any(MARK in ln for ln in lines):
+    print('  %s: already patched' % path); sys.exit(0)
+out, done = [], False
+for ln in lines:
+    out.append(ln)
+    if not done and ln.strip() == 'case NL80211_BAND_2GHZ:':
+        indent = ln[:len(ln) - len(ln.lstrip())]
+        out.append(indent + '\t' + MARK + '\n')
+        done = True
+if not done:
+    print('  %s: no "case NL80211_BAND_2GHZ:" - skipped' % path); sys.exit(1)
+with open(path, 'w', encoding='utf-8', newline='') as fh:
+    fh.writelines(out)
+print('  %s: patched' % path); sys.exit(0)
+PYEOF
+        then
+            CAST_HITS=$((CAST_HITS + 1))
+        fi
+    done
+    if [ "$CAST_HITS" -eq 0 ]; then
+        echo "!!!! 2.3 GHz enabled but the util.c signed-channel cast did not"
+        echo "     apply anywhere - negative 2 GHz channels would map to the"
+        echo "     wrong frequency. Refusing to ship a broken 2.3 GHz build."
+        exit 1
+    fi
+    echo "  cast applied to $CAST_HITS util.c copy/copies."
+fi
+
 # ---------------------------------------------------------------
 # Step 5: Full compilation.
 # ---------------------------------------------------------------

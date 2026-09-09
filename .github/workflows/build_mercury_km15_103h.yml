@@ -8,6 +8,12 @@ on:
       - 'scripts/**'
       - '.github/workflows/build_mercury_km15_103h.yml'
   workflow_dispatch:
+    inputs:
+      enable_23ghz:
+        description: 'EXPERIMENTAL: add 2.3 GHz channels (2312-2402 MHz) on the 2.4 GHz radio. The MT7915E RF front end is built for 2.4 GHz and has no calibration below it, so these may not radiate - measure on the device before trusting. Off = the stable standard build.'
+        type: boolean
+        required: false
+        default: false
 
 # Two pushes in quick succession would otherwise run two full ~35 minute
 # builds against the same cache, uploading two artifacts with the same
@@ -89,6 +95,9 @@ jobs:
         run: bash scripts/mercury-03-patch-platform.sh
 
       - name: Configure OpenWrt
+        env:
+          # The 2.3 GHz hostapd freq-mapping patch is written only when set.
+          MERCURY_ENABLE_23GHZ: ${{ inputs.enable_23ghz && '1' || '' }}
         run: bash scripts/mercury-04-configure.sh
 
       - name: Download Build Dependencies
@@ -97,6 +106,10 @@ jobs:
           make download -j8
 
       - name: Compile Firmware (regdb + precal fallback + build + verify)
+        env:
+          # Empty unless the run was dispatched with the 2.3 GHz box ticked.
+          # gen_mt7915_23ghz_patch.py, the util.c cast and mercury-06 read it.
+          MERCURY_ENABLE_23GHZ: ${{ inputs.enable_23ghz && '1' || '' }}
         run: bash scripts/mercury-05-compile.sh
 
       # What actually shipped, on the run page instead of buried in the
