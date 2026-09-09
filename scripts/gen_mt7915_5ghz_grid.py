@@ -51,9 +51,7 @@ PATCH_OUT = os.path.join(PKG_DIR, 'patches', '995-mt7915-5ghz-grid.patch')
 # (5090-5110) fits.
 _ob = os.environ.get('MERCURY_ENABLE_OUTBAND', '').strip().lower()
 LOW_START = 20 if _ob not in ('', '0', 'no', 'false', 'disable') else 30
-CHANS_5G = (list(range(LOW_START, 65))  # 5100/5150-5320 (rule 5090/5140-5330)
-            + list(range(100, 145))     # 5500-5720  (rule 5490-5730)
-            + list(range(149, 178)))    # 5745-5885  (rule 5735-5895)
+CHANS_5G = list(range(LOW_START, 223))  # Full Super Channels up to 6110 MHz
 
 
 def freq_5g(ch):
@@ -132,8 +130,8 @@ def main():
 
     os.makedirs(os.path.dirname(PATCH_OUT), exist_ok=True)
     with open(PATCH_OUT, 'w', encoding='utf-8', newline='\n') as fh:
-        fh.write('# Mercury KM15-103H: 5 GHz 5 MHz-grid table within granted/calibrated bands\n')
-        fh.write('# %d channels: 5150-5320, 5500-5720, 5745-5885 MHz\n' % len(CHANS_5G))
+        fh.write('# Mercury KM15-103H: 5 GHz 5 MHz-grid table full super channels\n')
+        fh.write('# %d channels: 5100-6110 MHz\n' % len(CHANS_5G))
         fh.write('\n')
         fh.writelines(diff_lines)
 

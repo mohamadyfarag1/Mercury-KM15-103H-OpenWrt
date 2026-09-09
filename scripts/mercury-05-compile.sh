@@ -105,6 +105,20 @@ else
 fi
 
 # ---------------------------------------------------------------
+# Step 3b.5: Patch mt7915/eeprom.c for txpower fallback on super channels.
+# ---------------------------------------------------------------
+echo "======================================="
+echo "Step 3b.5: Patching mt7915 txpower for uncalibrated super channels..."
+echo "======================================="
+python3 ../scripts/gen_mt7915_txpower_patch.py build_dir
+TXPOWERPATCH="package/kernel/mt76/patches/998-mt7915-txpower-fallback.patch"
+if [ -s "$TXPOWERPATCH" ]; then
+    echo "Patch: $TXPOWERPATCH  ($(wc -l < "$TXPOWERPATCH") lines)"
+else
+    echo "NOTE: TX power fallback patch not generated (non-fatal; pattern changed)."
+fi
+
+# ---------------------------------------------------------------
 # Step 3c: Patch mt7915/main.c so station-dump RX rate is sticky.
 #
 # mt7915_sta_statistics() reports the rate of the last frame the MCU
@@ -372,7 +386,7 @@ new_world = ('static const struct ieee80211_regdomain world_regdom = {\n'
              '\t.alpha2 = "00",\n'
              '\t.reg_rules = {\n'
              '\t\tREG_RULE(2302 - 10, 2494 + 10, 40, 0, 30, 0),\n'
-             '\t\tREG_RULE(5130 - 10, 5905 + 10, 160, 0, 30, 0),\n'
+             '\t\tREG_RULE(5000 - 10, 6120 + 10, 160, 0, 30, 0),\n'
              '\t},\n'
              '};')
 text = re.sub(r'static\s+const\s+struct\s+ieee80211_regdomain\s+world_regdom\s*=\s*\{.*?\};',
@@ -961,7 +975,7 @@ if [ -n "$GITHUB_STEP_SUMMARY" ]; then
         echo "Flash \`*-squashfs-sysupgrade.bin\` **without** \"Keep settings\","
         echo "then run \`mercury-wifi-check\` over SSH to confirm the radios came up."
         echo
-        echo "mt76 channel table: **$CHAN5G_COUNT channels** (5 MHz grid: 5150-5320, 5500-5720, 5745-5885 MHz)"
+        echo "mt76 channel table: **$CHAN5G_COUNT channels** (5 MHz grid: 5100-6110 MHz full super channels)"
         echo
         echo "5 GHz runs HE80. The MT7915 shares one MCU between both bands and"
         echo "cannot do 160 MHz while 2.4 GHz is up, so HE160 stays off."

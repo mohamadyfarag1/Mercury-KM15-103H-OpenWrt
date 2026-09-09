@@ -101,6 +101,27 @@ EOF
         echo "  wrote 994-mercury-23ghz.patch (hostapd)" ;;
 esac
 
+echo "5 GHz super channel hostapd mapping: ENABLED"
+mkdir -p package/network/services/hostapd/patches
+cat << 'EOF' > package/network/services/hostapd/patches/995-mercury-5ghz-super.patch
+--- a/src/common/ieee802_11_common.c
++++ b/src/common/ieee802_11_common.c
+@@ -1030,7 +1030,7 @@ enum hostapd_hw_mode hostapd_freq_to_cha
+ 		return HOSTAPD_MODE_IEEE80211A;
+ 	}
+ 
+-	if (freq >= 5000 && freq < 5900) {
++	if (freq >= 5000 && freq <= 6200) {
+ 		if ((freq - 5000) % 5)
+ 			return NUM_HOSTAPD_MODES;
+ 		*channel = (freq - 5000) / 5;
+-		*op_class = 0; /* TODO */
++		*op_class = 115; /* Mercury KM15-103H: 5GHz super channels */
+ 		return HOSTAPD_MODE_IEEE80211A;
+ 	}
+EOF
+echo "  wrote 995-mercury-5ghz-super.patch (hostapd)"
+
 
 echo "Writing target .config for Mercury KM15-103H..."
 cat << 'EOF' > .config
