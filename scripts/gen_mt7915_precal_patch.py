@@ -69,6 +69,12 @@ def patch_precal(text):
     t = text.replace('\r\n', '\n')
     changes = 0
 
+    # 0. Forward declare mt7915_eeprom_name to prevent implicit declaration error
+    p0 = re.compile(r'(static int mt7915_eeprom_load_precal\()')
+    r0 = r'static char *mt7915_eeprom_name(struct mt7915_dev *dev);\n\n\1'
+    t, n = p0.subn(r0, t)
+    changes += n
+
     # 1. Add variable declarations in mt7915_eeprom_load_precal
     p1 = re.compile(r'(\tu32 size, val = eeprom\[offs\];\n\tint ret;)')
     r1 = r'\1\n\tconst struct firmware *fw = NULL;\n\tconst char *name;'
