@@ -182,6 +182,33 @@ case "$ENABLE_23G" in
         ENABLE_23G="1" ;;
 esac
 
+# ---------------------------------------------------------------
+# Step 3f: EXPERIMENTAL outband_freq (opt-in, MERCURY_ENABLE_OUTBAND).
+#
+# Tries to beacon on non-standard 5 GHz centres by handing the MCU the raw
+# centre frequency in its undocumented outband_freq field, instead of only
+# the channel number it validates against its own table. This is the driver
+# layer below regdb/hostapd - the last thing between us and the closed MCU.
+# It may work, be ignored, or time out the MCU, so it is flag-gated and for
+# bench testing only. See gen_mt7915_outband_patch.py.
+# ---------------------------------------------------------------
+case "${MERCURY_ENABLE_OUTBAND:-}" in
+    ''|0|no|false|disable)
+        echo "Step 3f: outband_freq experiment disabled (set MERCURY_ENABLE_OUTBAND=1)." ;;
+    *)
+        echo "======================================="
+        echo "Step 3f: EXPERIMENTAL outband_freq MCU patch..."
+        echo "======================================="
+        python3 ../scripts/gen_mt7915_outband_patch.py build_dir
+        OBPATCH="package/kernel/mt76/patches/993-mt7915-outband-freq.patch"
+        if [ ! -s "$OBPATCH" ]; then
+            echo "!!!! outband patch requested but not generated."
+            exit 1
+        fi
+        echo "Patch: $OBPATCH  ($(wc -l < "$OBPATCH") lines)"
+        echo "NOTE: bench-test only - watch dmesg for MCU timeouts." ;;
+esac
+
 # The fallback reads precal out of mt7915_eeprom_dbdc.bin at offset 0xe10,
 # so that blob has to carry the calibration and not just the 3,584-byte
 # EEPROM image. 0xe10 + 105488 = 109088 bytes is the whole thing. A short

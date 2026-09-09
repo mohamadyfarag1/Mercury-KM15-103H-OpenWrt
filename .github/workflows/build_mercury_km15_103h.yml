@@ -14,6 +14,11 @@ on:
         type: boolean
         required: false
         default: false
+      enable_outband:
+        description: 'EXPERIMENTAL: feed the MCU the raw centre frequency (outband_freq) so it may beacon on non-standard 5 GHz channels it otherwise refuses. Undocumented vendor field - may not work or may time out the MCU. Bench-test only.'
+        type: boolean
+        required: false
+        default: false
 
 # Two pushes in quick succession would otherwise run two full ~35 minute
 # builds against the same cache, uploading two artifacts with the same
@@ -110,6 +115,8 @@ jobs:
           # Empty unless the run was dispatched with the 2.3 GHz box ticked.
           # gen_mt7915_23ghz_patch.py, the util.c cast and mercury-06 read it.
           MERCURY_ENABLE_23GHZ: ${{ inputs.enable_23ghz && '1' || '' }}
+          # Empty unless the outband experiment box was ticked.
+          MERCURY_ENABLE_OUTBAND: ${{ inputs.enable_outband && '1' || '' }}
         run: bash scripts/mercury-05-compile.sh
 
       # What actually shipped, on the run page instead of buried in the
