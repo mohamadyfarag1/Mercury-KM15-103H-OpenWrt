@@ -385,7 +385,7 @@ text = re.sub(r'NL80211_RRF_DFS', '0', text)
 new_world = ('static const struct ieee80211_regdomain world_regdom = {\n'
              '\t.alpha2 = "00",\n'
              '\t.reg_rules = {\n'
-             '\t\tREG_RULE(2302 - 10, 2494 + 10, 40, 0, 30, 0),\n'
+             '\t\tREG_RULE(2302 - 10, 2710 + 10, 40, 0, 30, 0),\n'
              '\t\tREG_RULE(5000 - 10, 6120 + 10, 160, 0, 30, 0),\n'
              '\t},\n'
              '};')

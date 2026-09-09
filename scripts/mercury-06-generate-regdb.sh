@@ -92,7 +92,7 @@ with open('db.txt', 'w') as f:
         # ungranted so the grid deliberately skips it.
         # The top rule reaches 5895 because the grid ends at ch177 (5885
         # MHz); ch177's 20 MHz needs 5885 + 10 = 5895.
-        f.write('\t(%d - 2482 @ 40), (30)\n' % GHZ24_FLOOR)
+        f.write('\t(%d - 2710 @ 40), (30)\n' % GHZ24_FLOOR)
         f.write('\t(%d - 6120 @ 160), (30)\n' % GHZ5_FLOOR)
         f.write('\n')
 print('Generated db.txt with %d countries (2.4 floor %d, 5 GHz floor %d, 2.3G %s, outband %s)'

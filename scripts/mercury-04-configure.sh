@@ -83,11 +83,12 @@ case "${MERCURY_ENABLE_23GHZ:-}" in
  	if (sec_channel > 1 || sec_channel < -1)
  		return NUM_HOSTAPD_MODES;
 
-+	/* Mercury EXPERIMENTAL: 2.3 GHz (2312 - 2402 MHz).
-+	 * Sub-2.4 GHz channels are negative on the 2407 + n*5 grid, so map
-+	 * them to op_class 81 as 11g. Uncalibrated - see gen_mt7915_23ghz. */
-+	if (freq >= 2312 && freq <= 2402) {
-+		if ((freq - 2312) % 5)
++	/* Mercury EXPERIMENTAL: 2.3 GHz & 2.7 GHz (2312 - 2402 MHz and 2487 - 2702 MHz).
++	 * Map them to op_class 81 as 11g. Uncalibrated. */
++	if ((freq >= 2312 && freq <= 2402) || (freq >= 2487 && freq <= 2702)) {
++		if (freq < 2407 && (freq - 2312) % 5)
++			return NUM_HOSTAPD_MODES;
++		if (freq > 2407 && (freq - 2407) % 5)
 +			return NUM_HOSTAPD_MODES;
 +		*channel = (freq - 2407) / 5;
 +		*op_class = 81;

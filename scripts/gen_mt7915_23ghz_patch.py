@@ -45,16 +45,14 @@ PATCH_OUT = os.path.join(PKG_DIR, 'patches', '994-mt7915-23ghz.patch')
 
 # 2 GHz channel N -> 2407 + N*5 MHz. -19..-1 = 2312..2402.
 CHANS_23G = list(range(-19, 0))
-
+CHANS_27G = list(range(16, 60)) # 2487 - 2702 MHz
 
 def freq_2g(ch):
     return 2407 + ch * 5
 
-
 def fail(msg):
     print('!!!! ' + msg)
     sys.exit(1)
-
 
 def find_mt76_mac80211(build_root):
     for dirpath, _dirs, files in os.walk(build_root):
@@ -72,7 +70,6 @@ def find_mt76_mac80211(build_root):
         if 'mt76_channels_2ghz' in text and 'CHAN2G(1, 2412)' in text:
             return path, text
     return None, None
-
 
 def main():
     build_root = sys.argv[1] if len(sys.argv) > 1 else 'build_dir'
@@ -100,20 +97,28 @@ def main():
     if not anchor.search(t):
         fail('anchor "CHAN2G(1, 2412)," not found - table format changed.')
 
-    new_lines = ''.join('\t%s\n' % ('CHAN2G(%d, %d),' % (ch, freq_2g(ch)))
-                        for ch in CHANS_23G)
-    new_text = anchor.sub(r'\1' + new_lines + r'\2\3', t, count=1)
+    new_lines_pre = ''.join('\t%s\n' % ('CHAN2G(%d, %d),' % (ch, freq_2g(ch)))
+                            for ch in CHANS_23G)
+    t = anchor.sub(r'\1' + new_lines_pre + r'\2\3', t, count=1)
+
+    anchor_post = re.compile(r'(CHAN2G\(14, 2484\),)(\n)')
+    if not anchor_post.search(t):
+        fail('anchor "CHAN2G(14, 2484)," not found.')
+
+    new_lines_post = ''.join('\t%s\n' % ('CHAN2G(%d, %d),' % (ch, freq_2g(ch)))
+                             for ch in CHANS_27G)
+    new_text = anchor_post.sub(r'\1\2' + new_lines_post, t, count=1)
 
     if new_text == t:
         fail('no change produced - refusing to write an empty patch.')
 
-    for ch in CHANS_23G:
+    for ch in CHANS_23G + CHANS_27G:
         if new_text.count('CHAN2G(%d, %d)' % (ch, freq_2g(ch))) != 1:
             fail('CHAN2G(%d, %d) not inserted cleanly.' % (ch, freq_2g(ch)))
 
     rel = os.path.basename(path)
     diff_lines = list(difflib.unified_diff(
-        t.splitlines(keepends=True),
+        old_text.splitlines(keepends=True),
         new_text.splitlines(keepends=True),
         fromfile='a/' + rel,
         tofile='b/' + rel,
@@ -124,14 +129,12 @@ def main():
 
     os.makedirs(os.path.dirname(PATCH_OUT), exist_ok=True)
     with open(PATCH_OUT, 'w', encoding='utf-8', newline='\n') as fh:
-        fh.write('# Mercury KM15-103H: EXPERIMENTAL 2.3 GHz channels 2312-2402 MHz\n')
-        fh.write('# ch-19..-1 on the 5 MHz grid. Uncalibrated - measure on hardware.\n')
+        fh.write('# Mercury KM15-103H: EXPERIMENTAL 2.3 GHz & 2.5-2.7 GHz channels\n')
+        fh.write('# ch-19..-1 and ch16..59 on the 5 MHz grid. Uncalibrated - measure on hardware.\n')
         fh.write('\n')
         fh.writelines(diff_lines)
 
-    print('  wrote: %s  (%d diff lines, %d channels, %d-%d MHz)'
-          % (PATCH_OUT, len(diff_lines), len(CHANS_23G),
-             freq_2g(CHANS_23G[0]), freq_2g(CHANS_23G[-1])))
+    print('  wrote: %s' % PATCH_OUT)
 
 
 if __name__ == '__main__':
