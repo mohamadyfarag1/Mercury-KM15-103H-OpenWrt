@@ -79,10 +79,10 @@ case "${MERCURY_ENABLE_23GHZ:-}" in
         cat << 'EOF' > package/network/services/hostapd/patches/994-mercury-23ghz.patch
 --- a/src/common/ieee802_11_common.c
 +++ b/src/common/ieee802_11_common.c
-@@ -1519,6 +1519,15 @@ enum hostapd_hw_mode
+@@ -1519,6 +1519,18 @@ enum hostapd_hw_mode
  	if (sec_channel > 1 || sec_channel < -1)
  		return NUM_HOSTAPD_MODES;
-
+ 
 +	/* Mercury EXPERIMENTAL: 2.3 GHz & 2.7 GHz (2312 - 2402 MHz and 2487 - 2702 MHz).
 +	 * Map them to op_class 81 as 11g. Uncalibrated. */
 +	if ((freq >= 2312 && freq <= 2402) || (freq >= 2487 && freq <= 2702)) {
@@ -107,7 +107,7 @@ mkdir -p package/network/services/hostapd/patches
 cat << 'EOF' > package/network/services/hostapd/patches/995-mercury-5ghz-super.patch
 --- a/src/common/ieee802_11_common.c
 +++ b/src/common/ieee802_11_common.c
-@@ -1030,7 +1030,7 @@ enum hostapd_hw_mode hostapd_freq_to_cha
+@@ -1030,10 +1030,10 @@ enum hostapd_hw_mode hostapd_freq_to_cha
  		return HOSTAPD_MODE_IEEE80211A;
  	}
  
