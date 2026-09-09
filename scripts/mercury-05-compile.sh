@@ -127,6 +127,29 @@ else
     echo "NOTE: RX-rate sticky patch not generated (non-fatal; cosmetic; pattern changed)."
 fi
 
+# ---------------------------------------------------------------
+# Step 3d: Conservatively extend the 5 GHz table down to 5150 MHz.
+#
+# Adds ch30-34 (5150-5170 MHz, 5 MHz grid) - the lower UNII-1 edge, right
+# at the bottom of the MT7915E's calibration. This is the deliberately
+# small replacement for the old 177-channel superchannel table: only the
+# channels most likely to actually radiate, nothing below 5150 (that needs
+# the on-device sweep). The regdb in Step 1 reaches down to 5140 so ch30's
+# 20 MHz fits. Unlike the old table this is FATAL on failure - if the user
+# asked for these channels they must be present, not silently dropped.
+# ---------------------------------------------------------------
+echo "======================================="
+echo "Step 3d: Extending 5 GHz table to the 5150-5170 MHz edge..."
+echo "======================================="
+python3 ../scripts/gen_mt7915_lowchan_patch.py build_dir
+LOWCHANPATCH="package/kernel/mt76/patches/995-mt7915-lowchan.patch"
+if [ ! -s "$LOWCHANPATCH" ]; then
+    echo "!!!! low-channel patch was not generated - the 5150-5170 MHz"
+    echo "     extension the config asks for would be missing."
+    exit 1
+fi
+echo "Patch: $LOWCHANPATCH  ($(wc -l < "$LOWCHANPATCH") lines)"
+
 # The fallback reads precal out of mt7915_eeprom_dbdc.bin at offset 0xe10,
 # so that blob has to carry the calibration and not just the 3,584-byte
 # EEPROM image. 0xe10 + 105488 = 109088 bytes is the whole thing. A short
@@ -283,20 +306,32 @@ fi
 
 # The count alone would not catch a table that kept 28 entries but moved
 # them off-plan, so check the actual frequencies too. The bounds are the
-# stock mt76 5 GHz table's own edges: 5170 (ch36) at the bottom, 5885
-# (ch177) at the top. The custom regdb in Step 1 grants exactly this span,
-# so anything outside it would be disabled by cfg80211 on selection. The
-# superchannel table this guards against had entries at 5100 and 6000+,
-# well past both edges.
+# shipped table's edges: 5150 (ch30, the conservative low extension) at
+# the bottom, 5885 (ch177) at the top. The custom regdb in Step 1 grants
+# exactly this span, so anything outside it would be disabled by cfg80211
+# on selection. The old superchannel table this guards against had entries
+# at 5100 and 6000+, well past both edges.
 OFFPLAN=$(grep -oE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" \
     | grep -oE '[0-9]+\)$' | tr -d ')' \
-    | awk '$1 < 5170 || $1 > 5885' | sort -u | tr '\n' ' ')
+    | awk '$1 < 5150 || $1 > 5885' | sort -u | tr '\n' ' ')
 if [ -n "$OFFPLAN" ]; then
-    echo "!!!! mt76 exposes 5 GHz frequencies outside the standard plan: $OFFPLAN"
-    echo "     The regulatory database grants 5170-5330, 5490-5730 and"
+    echo "!!!! mt76 exposes 5 GHz frequencies outside the shipped plan: $OFFPLAN"
+    echo "     The regulatory database grants 5140-5330, 5490-5730 and"
     echo "     5735-5895 MHz, so these would be dead channels on the device."
     exit 1
 fi
+
+# The low-channel extension must actually be in the compiled table - a
+# silently dropped patch would leave the config asking for 5150-5170 while
+# the driver never registered them.
+for LF in 5150 5155 5160 5165 5170; do
+    if ! grep -qE "CHAN5G\([0-9]+, *$LF\)" "$MT76_MAC"; then
+        echo "!!!! mt76 table is missing the $LF MHz low-edge channel -"
+        echo "     995-mt7915-lowchan.patch did not reach this build."
+        exit 1
+    fi
+done
+echo "OK: low-edge channels 5150-5170 MHz present in the mt76 table."
 
 # HE160 must stay guarded by dbdc_support. With the guard gone the driver
 # advertises 160 MHz, hostapd builds 160-capable station records, and the

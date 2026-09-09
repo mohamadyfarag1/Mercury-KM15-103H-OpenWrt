@@ -85,6 +85,11 @@ CONFIG_PACKAGE_wpad-mbedtls=y
 CONFIG_PACKAGE_luci=y
 CONFIG_PACKAGE_luci-ssl=y
 CONFIG_PACKAGE_luci-app-commands=y
+# luci-theme-openwrt-2020 is the default UI ("style 2020"). bootstrap is
+# kept as the built-in fallback LuCI always ships. The active theme is set
+# in files/etc/config/luci (option mediaurlbase), not just by installing
+# the package - installing alone leaves bootstrap selected.
+CONFIG_PACKAGE_luci-theme-openwrt-2020=y
 CONFIG_PACKAGE_luci-theme-bootstrap=y
 CONFIG_PACKAGE_iwinfo=y
 CONFIG_PACKAGE_rpcd=y

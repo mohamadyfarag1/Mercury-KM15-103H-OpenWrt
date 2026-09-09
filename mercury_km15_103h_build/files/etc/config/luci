@@ -1,6 +1,6 @@
 config core 'main'
 	option lang 'auto'
-	option mediaurlbase '/luci-static/bootstrap'
+	option mediaurlbase '/luci-static/openwrt2020'
 	option resourcebase '/luci-static/resources'
 
 config command 'extroot'

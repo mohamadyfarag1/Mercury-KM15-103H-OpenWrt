@@ -22,11 +22,17 @@ config dnsmasq
 	# for the connect to time out before falling back to IPv4.
 	option filter_aaaa '1'
 
+# LAN DHCP server disabled: this unit runs as an access point behind an
+# existing router/gateway, so an upstream DHCP server hands out addresses
+# on br-lan. 'ignore 1' stops dnsmasq answering DHCP here, which would
+# otherwise fight the upstream server and hand clients a second, wrong
+# lease. The router keeps its own static 192.168.100.1 for management.
 config dhcp 'lan'
 	option interface 'lan'
 	option start '100'
 	option limit '150'
 	option leasetime '12h'
+	option ignore '1'
 
 config dhcp 'wan'
 	option interface 'wan'
