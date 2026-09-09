@@ -491,17 +491,21 @@ fi
 
 # The count alone would not catch a table of the right SIZE but with the
 # wrong frequencies, so check the actual edges too. The grid spans 5150
-# (ch30) to 5885 (ch177); the regdb grants exactly this, so anything
-# outside would be disabled by cfg80211. The DFS void 5330-5490 must also
-# stay empty - a channel there has no regdb rule and would be dead.
+# (ch30) to 5885 (ch177) - or down to 5100 (ch20) with the outband
+# experiment on; the regdb grants exactly this, so anything outside would
+# be disabled by cfg80211. The DFS void 5330-5490 must stay empty - a
+# channel there has no regdb rule and would be dead.
+case "${MERCURY_ENABLE_OUTBAND:-}" in
+    ''|0|no|false|disable) LOW_EDGE=5150 ;;
+    *)                     LOW_EDGE=5100 ;;
+esac
 OFFPLAN=$(grep -oE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" \
     | grep -oE '[0-9]+\)$' | tr -d ')' \
-    | awk '$1 < 5150 || $1 > 5885 || ($1 > 5330 && $1 < 5490)' \
+    | awk -v lo="$LOW_EDGE" '$1 < lo || $1 > 5885 || ($1 > 5330 && $1 < 5490)' \
     | sort -u | tr '\n' ' ')
 if [ -n "$OFFPLAN" ]; then
     echo "!!!! mt76 exposes 5 GHz frequencies outside the granted bands: $OFFPLAN"
-    echo "     The regulatory database grants 5140-5330, 5490-5730 and"
-    echo "     5735-5895 MHz, so these would be dead channels on the device."
+    echo "     (low edge for this build is $LOW_EDGE MHz)"
     exit 1
 fi
 

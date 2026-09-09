@@ -41,9 +41,19 @@ PATCH_OUT = os.path.join(PKG_DIR, 'patches', '995-mt7915-5ghz-grid.patch')
 
 # 5 GHz channel N sits at 5000 + N*5 MHz. Piecewise 5 MHz grid, each range
 # trimmed so the channel's 20 MHz stays inside its regdb rule.
-CHANS_5G = (list(range(30, 65))       # 5150-5320  (rule 5140-5330)
-            + list(range(100, 145))   # 5500-5720  (rule 5490-5730)
-            + list(range(149, 178)))  # 5745-5885  (rule 5735-5895)
+#
+# With the outband experiment on (MERCURY_ENABLE_OUTBAND), band A reaches
+# down to ch20 (5100 MHz) so the low channels the user wants exist in the
+# table for the outband_freq patch to try to tune. These are far below
+# calibration and only stand a chance via outband, so they are tied to that
+# flag; the stable table still starts at ch30 (5150). The regdb low-rule
+# floor in mercury-06 drops to 5090 under the same flag so ch20's 20 MHz
+# (5090-5110) fits.
+_ob = os.environ.get('MERCURY_ENABLE_OUTBAND', '').strip().lower()
+LOW_START = 20 if _ob not in ('', '0', 'no', 'false', 'disable') else 30
+CHANS_5G = (list(range(LOW_START, 65))  # 5100/5150-5320 (rule 5090/5140-5330)
+            + list(range(100, 145))     # 5500-5720  (rule 5490-5730)
+            + list(range(149, 178)))    # 5745-5885  (rule 5735-5895)
 
 
 def freq_5g(ch):

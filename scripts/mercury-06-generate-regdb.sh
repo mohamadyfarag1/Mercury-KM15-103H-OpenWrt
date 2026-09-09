@@ -34,6 +34,13 @@ _e = os.environ.get('MERCURY_ENABLE_23GHZ', '').strip().lower()
 ENABLE_23G = _e not in ('', '0', 'no', 'false', 'disable')
 GHZ24_FLOOR = 2302 if ENABLE_23G else 2402
 
+# The outband experiment adds low 5 GHz channels down to ch20 (5100 MHz) to
+# the driver table (gen_mt7915_5ghz_grid.py); drop the 5 GHz low-rule floor
+# to 5090 so ch20's 20 MHz (5090-5110) fits. Off = the stable 5140 floor.
+_o = os.environ.get('MERCURY_ENABLE_OUTBAND', '').strip().lower()
+ENABLE_OUTBAND = _o not in ('', '0', 'no', 'false', 'disable')
+GHZ5_FLOOR = 5090 if ENABLE_OUTBAND else 5140
+
 countries = [
     '00',
     'AD','AE','AF','AL','AM','AN','AR','AT','AU','AW','AZ',
@@ -86,12 +93,13 @@ with open('db.txt', 'w') as f:
         # The top rule reaches 5895 because the grid ends at ch177 (5885
         # MHz); ch177's 20 MHz needs 5885 + 10 = 5895.
         f.write('\t(%d - 2482 @ 40), (30)\n' % GHZ24_FLOOR)
-        f.write('\t(5140 - 5330 @ 160), (30)\n')
+        f.write('\t(%d - 5330 @ 160), (30)\n' % GHZ5_FLOOR)
         f.write('\t(5490 - 5730 @ 160), (30)\n')
         f.write('\t(5735 - 5895 @ 80), (30)\n')
         f.write('\n')
-print('Generated db.txt with %d countries (2.4 GHz floor %d MHz, 2.3 GHz %s)'
-      % (len(countries), GHZ24_FLOOR, 'ON' if ENABLE_23G else 'off'))
+print('Generated db.txt with %d countries (2.4 floor %d, 5 GHz floor %d, 2.3G %s, outband %s)'
+      % (len(countries), GHZ24_FLOOR, GHZ5_FLOOR,
+         'ON' if ENABLE_23G else 'off', 'ON' if ENABLE_OUTBAND else 'off'))
 PYEOF
 
 openssl ecparam -name prime256v1 -genkey -noout -out key.priv.pem
