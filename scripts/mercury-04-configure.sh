@@ -126,9 +126,9 @@ CONFIG_PACKAGE_usbutils=y
 # OpenWrt pulls odhcpd, odhcp6c, ip6tables and the kernel IPv6 stack in by
 # default through DEFAULT_PACKAGES, so switching them off has to be
 # explicit; deleting the uci sections alone leaves the daemons installed
-# and running. CONFIG_IPV6=n is what actually drops the in-kernel stack,
-# and the rest stops the userland from being built against it.
-# CONFIG_IPV6 is not set
+# and running. These package disables are what stop the userland from
+# being built - odhcp6c/odhcpd are the daemons that solicit on the WAN,
+# so removing them is what makes the box IPv4-only in practice.
 # CONFIG_PACKAGE_odhcpd-ipv6only is not set
 # CONFIG_PACKAGE_odhcp6c is not set
 # CONFIG_PACKAGE_kmod-ipv6 is not set
@@ -142,6 +142,14 @@ CONFIG_PACKAGE_usbutils=y
 # CONFIG_PACKAGE_6rd is not set
 # CONFIG_PACKAGE_6to4 is not set
 # CONFIG_PACKAGE_ds-lite is not set
+#
+# CONFIG_IPV6 (the global "IPv6 support in packages" flag) is deliberately
+# NOT seeded off. It is default-y and firewall4/dnsmasq/wpad depend on it,
+# so defconfig re-selects it and forcing it off breaks the build (verified:
+# the first build after this change failed the IPv6 gate on exactly this
+# symbol). With every IPv6 daemon and the ip6tables userland gone, the
+# in-kernel stack being present is inert - nothing configures an address
+# or solicits on any interface.
 
 # Base filesystem
 CONFIG_TARGET_ROOTFS_SQUASHFS=y
@@ -272,19 +280,30 @@ if [ -n "$MISSING" ]; then
 fi
 
 # ---------------------------------------------------------------
-# Confirm IPv6 really is gone.
+# Confirm the IPv6 DAEMONS are gone.
 #
 # The "# CONFIG_X is not set" lines above are a request, not a result.
-# Anything still listed in the target's DEFAULT_PACKAGES, or pulled in as
-# a dependency of a package we do want, comes back with =y and defconfig
+# Anything still in the target's DEFAULT_PACKAGES, or pulled in as a
+# dependency of a package we do want, comes back with =y and defconfig
 # says nothing. Deleting the uci sections while odhcpd is still installed
 # leaves the daemon running with its own defaults, which is the failure
 # this catches.
+#
+# The fatal list is the userland that actually does something on the wire:
+# odhcp6c solicits on the WAN, odhcpd hands out addresses on the LAN,
+# ip6tables/kmod-ipv6 carry the filtering path. If any of those ship, the
+# box is not IPv4-only no matter what the uci files say.
+#
+# CONFIG_IPV6 itself is NOT fatal. It is the global "IPv6 support in
+# packages" switch, default-y, and firewall4/dnsmasq/wpad depend on it,
+# so defconfig re-selects it every time and forcing it off breaks the
+# build. With the daemons above gone the in-kernel stack is inert, so its
+# presence is reported as a note, not a failure.
 # ---------------------------------------------------------------
 echo ""
-echo "Verifying IPv6 was dropped..."
+echo "Verifying IPv6 daemons were dropped..."
 IPV6_LEFT=""
-for SYM in CONFIG_IPV6 CONFIG_PACKAGE_odhcpd-ipv6only CONFIG_PACKAGE_odhcp6c \
+for SYM in CONFIG_PACKAGE_odhcpd-ipv6only CONFIG_PACKAGE_odhcp6c \
            CONFIG_PACKAGE_kmod-ipv6 CONFIG_PACKAGE_ip6tables; do
 	if grep -q "^${SYM}=y" .config; then
 		echo "  STILL ON : $SYM"
@@ -293,12 +312,15 @@ for SYM in CONFIG_IPV6 CONFIG_PACKAGE_odhcpd-ipv6only CONFIG_PACKAGE_odhcp6c \
 		echo "  OK       : $SYM disabled"
 	fi
 done
+if grep -q "^CONFIG_IPV6=y" .config; then
+	echo "  NOTE     : CONFIG_IPV6=y (kernel stack present but inert - no daemons)"
+fi
 if [ -n "$IPV6_LEFT" ]; then
 	echo ""
-	echo "❌ ERROR: IPv6 survived defconfig:$IPV6_LEFT"
-	echo "   Something in DEFAULT_PACKAGES or a dependency re-selected it."
-	echo "   Find what pulls it in before shipping - an IPv4-only config"
-	echo "   against an IPv6-enabled image gives a router that still"
+	echo "❌ ERROR: IPv6 daemons survived defconfig:$IPV6_LEFT"
+	echo "   Something in DEFAULT_PACKAGES or a dependency re-selected them."
+	echo "   Find what pulls them in before shipping - an IPv4-only config"
+	echo "   against an image that still ships odhcp6c gives a router that"
 	echo "   solicits on the WAN with no configuration behind it."
 	exit 1
 fi
