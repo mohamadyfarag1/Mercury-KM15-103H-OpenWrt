@@ -104,6 +104,29 @@ else
     echo "NOTE: Precal fallback patch not generated (non-fatal; pattern changed)."
 fi
 
+# ---------------------------------------------------------------
+# Step 3c: Patch mt7915/main.c so station-dump RX rate is sticky.
+#
+# mt7915_sta_statistics() reports the rate of the last frame the MCU
+# decoded. An idle station sends only base-rate control frames, so the
+# reported RX rate collapses to 6 Mbit/s next to a 1201 Mbit/s TX - which
+# reads like a fault but is just the live rate of a tiny idle frame.
+# Verified on hardware that no supported_rates/basic_rate floor changes
+# this (6 Mbit/s is a mandatory OFDM rate). This patch reports the
+# negotiated TX rate when the RX query returns a plain legacy rate, so the
+# idle display matches ath10k. DISPLAY ONLY - no datapath/throughput change.
+# ---------------------------------------------------------------
+echo "======================================="
+echo "Step 3c: Patching mt7915 main.c RX-rate display (sticky)..."
+echo "======================================="
+python3 ../scripts/gen_mt7915_rxrate_patch.py build_dir
+RXRATEPATCH="package/kernel/mt76/patches/996-mt7915-rxrate-sticky.patch"
+if [ -s "$RXRATEPATCH" ]; then
+    echo "Patch: $RXRATEPATCH  ($(wc -l < "$RXRATEPATCH") lines)"
+else
+    echo "NOTE: RX-rate sticky patch not generated (non-fatal; cosmetic; pattern changed)."
+fi
+
 # The fallback reads precal out of mt7915_eeprom_dbdc.bin at offset 0xe10,
 # so that blob has to carry the calibration and not just the 3,584-byte
 # EEPROM image. 0xe10 + 105488 = 109088 bytes is the whole thing. A short
