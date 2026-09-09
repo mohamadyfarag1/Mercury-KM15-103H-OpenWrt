@@ -75,14 +75,16 @@ with open('db.txt', 'w') as f:
         #   5140-5330  : lower UNII-1 edge + UNII-1 + UNII-2A, ch30-64
         #   5490-5730  : UNII-2C, ch100-144
         #   5735-5895  : UNII-3 + UNII-4, ch149-177
-        # The low rule starts at 5140, not 5170, to cover the conservative
-        # downward extension (995-mt7915-lowchan.patch adds ch30-34,
-        # 5150-5170 MHz). A rule must contain the whole channel: ch30 at
-        # 5150 spans 5140-5160 at 20 MHz, so the floor is 5150 - 10 = 5140.
-        # This is exactly the edge the old 5100 floor got wrong - the floor
-        # is a channel EDGE, never a channel centre.
-        # The top rule reaches 5895 because the stock mt76 table ends at
-        # ch177 (5885 MHz); ch177's 20 MHz needs 5885 + 10 = 5895.
+        # The low rule starts at 5140, not 5170, to cover the 5 MHz-grid
+        # table (995-mt7915-5ghz-grid.patch), whose lowest channel is ch30
+        # (5150 MHz). A rule must contain the whole channel: ch30 at 5150
+        # spans 5140-5160 at 20 MHz, so the floor is 5150 - 10 = 5140. This
+        # is exactly the edge the old 5100 floor got wrong - the floor is a
+        # channel EDGE, never a channel centre. The three rules match the
+        # grid's three sub-bands one-to-one; the DFS void 5330-5490 is left
+        # ungranted so the grid deliberately skips it.
+        # The top rule reaches 5895 because the grid ends at ch177 (5885
+        # MHz); ch177's 20 MHz needs 5885 + 10 = 5895.
         f.write('\t(%d - 2482 @ 40), (30)\n' % GHZ24_FLOOR)
         f.write('\t(5140 - 5330 @ 160), (30)\n')
         f.write('\t(5490 - 5730 @ 160), (30)\n')

@@ -109,23 +109,19 @@ for PHYPATH in /sys/class/ieee80211/*; do
             while read -r l; do say "            $l"; done
     fi
 
-    # 5 GHz sanity: this build ships the stock standard channel plan
-    # (5170-5885 MHz), so roughly 25-30 channels is correct. A count far
-    # above that means a superchannel table got back into the driver -
-    # those channels have no EEPROM calibration on the MT7915E and
-    # hostapd refuses them at bring-up ("Could not select hw_mode and
-    # channel"). A count far below means the custom regulatory.db did
-    # not make it into the image.
+    # 5 GHz sanity: this build ships a 5 MHz-grid table within the granted,
+    # calibrated bands (5150-5320, 5500-5720, 5745-5885 MHz) - about 109
+    # channels. A count far below that means the grid patch or the custom
+    # regulatory.db did not make it in (most of the band regulatory-blocked
+    # or the stock ~28 table shipped). Any 0.0 dBm channel above is one the
+    # regdb granted but the board cannot calibrate - report it (handled by
+    # the ZERO check above), it is not a pass just because it is listed.
     IS5G=$(echo "$INFO" | grep -c "51[0-9][0-9]\|52[0-9][0-9]\|54[0-9][0-9]\|58[0-9][0-9]")
     if [ "$IS5G" -gt 0 ]; then
-        if [ "$CHANS" -gt 60 ]; then
-            problem "$PHY shows $CHANS 5 GHz channels (standard plan is ~28)."
-            say "            A superchannel table is back in the mt76 driver."
-            say "            Those frequencies are uncalibrated and will not beacon."
-        elif [ "$CHANS" -lt 15 ]; then
-            problem "$PHY shows only $CHANS 5 GHz channels (standard plan is ~28)."
-            say "            The custom regulatory.db did not make it into the image,"
-            say "            so most of the band is regulatory-blocked."
+        if [ "$CHANS" -lt 80 ]; then
+            problem "$PHY shows only $CHANS 5 GHz channels (grid table is ~109)."
+            say "            The 5 GHz grid patch or the custom regulatory.db did"
+            say "            not make it into the image, so channels are missing."
         fi
     fi
 

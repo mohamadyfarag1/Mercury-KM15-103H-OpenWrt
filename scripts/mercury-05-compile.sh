@@ -128,27 +128,26 @@ else
 fi
 
 # ---------------------------------------------------------------
-# Step 3d: Conservatively extend the 5 GHz table down to 5150 MHz.
+# Step 3d: Replace the 5 GHz table with a 5 MHz-grid table.
 #
-# Adds ch30-34 (5150-5170 MHz, 5 MHz grid) - the lower UNII-1 edge, right
-# at the bottom of the MT7915E's calibration. This is the deliberately
-# small replacement for the old 177-channel superchannel table: only the
-# channels most likely to actually radiate, nothing below 5150 (that needs
-# the on-device sweep). The regdb in Step 1 reaches down to 5140 so ch30's
-# 20 MHz fits. Unlike the old table this is FATAL on failure - if the user
-# asked for these channels they must be present, not silently dropped.
+# Continuous 5 MHz grid inside the three sub-bands the regdb grants and the
+# MT7915E calibrates (5150-5320, 5500-5720, 5745-5885), giving the odd
+# point-to-point channels without the dead out-of-band channels the old
+# 177-entry table carried. The same table is what station/WDS mode scans,
+# so a second unit on this firmware sees these channels too. FATAL on
+# failure - the channels must be present, not silently dropped.
 # ---------------------------------------------------------------
 echo "======================================="
-echo "Step 3d: Extending 5 GHz table to the 5150-5170 MHz edge..."
+echo "Step 3d: Installing 5 GHz 5 MHz-grid channel table..."
 echo "======================================="
-python3 ../scripts/gen_mt7915_lowchan_patch.py build_dir
-LOWCHANPATCH="package/kernel/mt76/patches/995-mt7915-lowchan.patch"
-if [ ! -s "$LOWCHANPATCH" ]; then
-    echo "!!!! low-channel patch was not generated - the 5150-5170 MHz"
-    echo "     extension the config asks for would be missing."
+python3 ../scripts/gen_mt7915_5ghz_grid.py build_dir
+GRIDPATCH="package/kernel/mt76/patches/995-mt7915-5ghz-grid.patch"
+if [ ! -s "$GRIDPATCH" ]; then
+    echo "!!!! 5 GHz grid patch was not generated - the extended channel"
+    echo "     table the config asks for would be missing."
     exit 1
 fi
-echo "Patch: $LOWCHANPATCH  ($(wc -l < "$LOWCHANPATCH") lines)"
+echo "Patch: $GRIDPATCH  ($(wc -l < "$GRIDPATCH") lines)"
 
 # ---------------------------------------------------------------
 # Step 3e: EXPERIMENTAL 2.3 GHz channels (opt-in, MERCURY_ENABLE_23GHZ).
@@ -307,6 +306,69 @@ PYEOF
 fi
 
 # ---------------------------------------------------------------
+# Step 4c: Widen the built-in world regulatory domain (net/wireless/reg.c).
+#
+# Two problems this fixes, both seen on real hardware:
+#
+#  1. Country 00 drops TX power to 0 dBm. The compiled-in world_regdom is
+#     deliberately tiny and flagged NO_IR, so selecting country "00" leaves
+#     the radio unable to transmit. Widening it to the full bands at 30 dBm
+#     with the restriction flags cleared gives 00 real power.
+#
+#  2. Client / WDS mode can't see or join an extended channel when the
+#     custom regdb is not the domain in force (a unit on a different country,
+#     or one where regdb did not load, falls back to this world domain). With
+#     NO_IR set, a station may passive-scan but cannot associate; clearing it
+#     - and DFS, so the scan is active - is what lets the receiver actually
+#     connect on the channels the AP beacons.
+#
+# All plain s/// substitutions plus one whole-block replace - no line
+# deletions, so kernel braces cannot desynchronise. Patches the kernel tree
+# and the mac80211 backports copy (both prepared in Step 2, neither removed).
+# ---------------------------------------------------------------
+echo "======================================="
+echo "Step 4c: Widening built-in world regulatory domain (reg.c)..."
+echo "======================================="
+REG_HITS=0
+for REG in $(find build_dir -path "*/net/wireless/reg.c" 2>/dev/null); do
+    if python3 - "$REG" <<'PYEOF'
+import sys, re
+path = sys.argv[1]
+with open(path, encoding='utf-8', errors='ignore') as fh:
+    text = fh.read()
+before = text
+text = re.sub(r'NL80211_RRF_NO_IR\s*\|\s*NL80211_RRF_AUTO_BW', '0', text)
+text = re.sub(r'NL80211_RRF_NO_IR', '0', text)
+text = re.sub(r'NL80211_RRF_NO_OFDM', '0', text)
+text = re.sub(r'NL80211_RRF_DFS', '0', text)
+new_world = ('static const struct ieee80211_regdomain world_regdom = {\n'
+             '\t.alpha2 = "00",\n'
+             '\t.reg_rules = {\n'
+             '\t\tREG_RULE(2302 - 10, 2494 + 10, 40, 0, 30, 0),\n'
+             '\t\tREG_RULE(5130 - 10, 5905 + 10, 160, 0, 30, 0),\n'
+             '\t},\n'
+             '};')
+text = re.sub(r'static\s+const\s+struct\s+ieee80211_regdomain\s+world_regdom\s*=\s*\{.*?\};',
+              new_world, text, flags=re.DOTALL)
+if text != before:
+    with open(path, 'w', encoding='utf-8', newline='\n') as fh:
+        fh.write(text)
+    print('  %s: widened + flags cleared' % path); sys.exit(0)
+print('  %s: no change (already patched?)' % path); sys.exit(1)
+PYEOF
+    then
+        REG_HITS=$((REG_HITS + 1))
+    fi
+done
+if [ "$REG_HITS" -eq 0 ]; then
+    echo "!!!! net/wireless/reg.c was not widened anywhere - country 00 would"
+    echo "     stay at 0 dBm and client mode would fail on extended channels."
+    echo "     'make package/kernel/mac80211/prepare' must have unpacked the tree."
+    exit 1
+fi
+echo "  world domain widened in $REG_HITS reg.c copy/copies."
+
+# ---------------------------------------------------------------
 # Step 5: Full compilation.
 # ---------------------------------------------------------------
 echo "======================================="
@@ -383,45 +445,49 @@ fi
 # kind of off-by-one that turns a threshold check into a coin flip.
 CHAN5G_COUNT=$(grep -cE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" 2>/dev/null || true)
 echo "mt76 package source : $MT76_MAC"
-echo "CHAN5G entries      : $CHAN5G_COUNT  (stock standard plan is ~28)"
-if [ "${CHAN5G_COUNT:-0}" -gt 60 ]; then
-    echo "!!!! The mt76 package carries $CHAN5G_COUNT CHAN5G entries - far more"
-    echo "     than the ~28 of the standard plan, so a superchannel table"
-    echo "     reached this build. Those channels have no EEPROM calibration"
-    echo "     and hostapd refuses them at AP bring-up."
-    echo "--- patches present in the package ---"
+echo "CHAN5G entries      : $CHAN5G_COUNT  (5 MHz-grid table is 109)"
+# The grid table is 109 channels (5150-5320, 5500-5720, 5745-5885). Guard
+# both ways: far below 100 means the grid patch did not apply and we shipped
+# the stock ~28 table; far above 130 means an out-of-band superchannel table
+# (the old 177-entry one) slipped back in.
+if [ "${CHAN5G_COUNT:-0}" -lt 100 ]; then
+    echo "!!!! only $CHAN5G_COUNT CHAN5G entries - the 5 GHz grid patch"
+    echo "     (995-mt7915-5ghz-grid.patch) did not reach this build."
     ls -l package/kernel/mt76/patches/ 2>/dev/null || echo "(no patches dir)"
     exit 1
 fi
+if [ "${CHAN5G_COUNT:-0}" -gt 130 ]; then
+    echo "!!!! $CHAN5G_COUNT CHAN5G entries - more than the 109-channel grid,"
+    echo "     so an out-of-band superchannel table slipped in."
+    exit 1
+fi
 
-# The count alone would not catch a table that kept 28 entries but moved
-# them off-plan, so check the actual frequencies too. The bounds are the
-# shipped table's edges: 5150 (ch30, the conservative low extension) at
-# the bottom, 5885 (ch177) at the top. The custom regdb in Step 1 grants
-# exactly this span, so anything outside it would be disabled by cfg80211
-# on selection. The old superchannel table this guards against had entries
-# at 5100 and 6000+, well past both edges.
+# The count alone would not catch a table of the right SIZE but with the
+# wrong frequencies, so check the actual edges too. The grid spans 5150
+# (ch30) to 5885 (ch177); the regdb grants exactly this, so anything
+# outside would be disabled by cfg80211. The DFS void 5330-5490 must also
+# stay empty - a channel there has no regdb rule and would be dead.
 OFFPLAN=$(grep -oE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" \
     | grep -oE '[0-9]+\)$' | tr -d ')' \
-    | awk '$1 < 5150 || $1 > 5885' | sort -u | tr '\n' ' ')
+    | awk '$1 < 5150 || $1 > 5885 || ($1 > 5330 && $1 < 5490)' \
+    | sort -u | tr '\n' ' ')
 if [ -n "$OFFPLAN" ]; then
-    echo "!!!! mt76 exposes 5 GHz frequencies outside the shipped plan: $OFFPLAN"
+    echo "!!!! mt76 exposes 5 GHz frequencies outside the granted bands: $OFFPLAN"
     echo "     The regulatory database grants 5140-5330, 5490-5730 and"
     echo "     5735-5895 MHz, so these would be dead channels on the device."
     exit 1
 fi
 
-# The low-channel extension must actually be in the compiled table - a
-# silently dropped patch would leave the config asking for 5150-5170 while
-# the driver never registered them.
-for LF in 5150 5155 5160 5165 5170; do
+# Spot-check that representative grid channels - both odd and standard, in
+# each sub-band - actually made it into the compiled table.
+for LF in 5150 5155 5320 5500 5720 5745 5885; do
     if ! grep -qE "CHAN5G\([0-9]+, *$LF\)" "$MT76_MAC"; then
-        echo "!!!! mt76 table is missing the $LF MHz low-edge channel -"
-        echo "     995-mt7915-lowchan.patch did not reach this build."
+        echo "!!!! mt76 table is missing the $LF MHz grid channel -"
+        echo "     995-mt7915-5ghz-grid.patch did not apply completely."
         exit 1
     fi
 done
-echo "OK: low-edge channels 5150-5170 MHz present in the mt76 table."
+echo "OK: 5 GHz 5 MHz-grid channels present across all three sub-bands."
 
 # HE160 must stay guarded by dbdc_support. With the guard gone the driver
 # advertises 160 MHz, hostapd builds 160-capable station records, and the
@@ -450,7 +516,7 @@ else
     grep -n 'nss_160' "$MT7915_INIT" | head -10
     exit 1
 fi
-echo "OK: mt76 package carries the standard $CHAN5G_COUNT-channel table."
+echo "OK: mt76 package carries the $CHAN5G_COUNT-channel 5 MHz-grid table."
 
 # Prove the PATCHED source is what actually got compiled: a module must
 # exist inside this same package tree. Counting channels in a source
@@ -864,9 +930,11 @@ if [ -n "$GITHUB_STEP_SUMMARY" ]; then
         echo "Flash \`*-squashfs-sysupgrade.bin\` **without** \"Keep settings\","
         echo "then run \`mercury-wifi-check\` over SSH to confirm the radios came up."
         echo
-        echo "mt76 channel table: **$CHAN5G_COUNT channels** (standard plan, 5170-5885 MHz)"
+        echo "mt76 channel table: **$CHAN5G_COUNT channels** (5 MHz grid: 5150-5320, 5500-5720, 5745-5885 MHz)"
         echo
         echo "5 GHz runs HE80. The MT7915 shares one MCU between both bands and"
         echo "cannot do 160 MHz while 2.4 GHz is up, so HE160 stays off."
+        echo "Built-in world domain widened, so country 00 gives full power and"
+        echo "client/WDS mode sees the extended channels."
     } >> "$GITHUB_STEP_SUMMARY"
 fi
