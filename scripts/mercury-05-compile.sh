@@ -3,8 +3,8 @@
 # Script 5: Compile Firmware for Mercury KM15-103H
 # ===============================================================
 # Called from the repository root by the CI workflow.
-# Orchestrates: regdb, kernel superchannel patches, mt76 channel
-# table extension, full build, post-build verification.
+# Orchestrates: regdb, mt76 driver patch hygiene, precal fallback,
+# full build, post-build verification.
 # ===============================================================
 set -e
 
@@ -39,64 +39,62 @@ make package/kernel/mac80211/prepare V=s -j"$(nproc)" 2>&1 || true
 make package/kernel/mt76/prepare V=s -j"$(nproc)"   2>&1 || true
 
 # ---------------------------------------------------------------
-# Step 3: Extend mt76_channels_5ghz[] to the 177-channel table.
+# Step 3: Remove the two driver patches that destabilised the radio.
 #
-# The stock mt76 table has ~28 channels at 20 MHz spacing.
-# gen_mt76_patch.py finds the prepared mac80211.c in build_dir,
-# replaces the array with 177 channels at 5 MHz spacing
-# (ch20-222, 5100-6110 MHz), generates a unified diff, and drops
-# it into package/kernel/mt76/patches/ so OpenWrt applies it
-# during Build/Prepare for every future rebuild. Then we clean
-# mt76 so the full build re-prepares it from the patched source.
-# ---------------------------------------------------------------
+# Both were verified dead on real hardware (192.168.100.1, 2026-09-09)
+# and neither can be salvaged by configuration, so they are deleted
+# here rather than left for a later run to pick up.
 #
-# 2.3 GHz (2312-2402 MHz) is OFF by default. Set MERCURY_ENABLE_23GHZ=1
-# in the environment to include it - see the note in gen_mt76_patch.py
-# for why it is opt-in rather than always on.
-# ---------------------------------------------------------------
-echo "======================================="
-echo "Step 3: Extending mt76 channel table to 177 channels (5100-6110 MHz)..."
-echo "======================================="
-echo "MERCURY_ENABLE_23GHZ = '${MERCURY_ENABLE_23GHZ:-(unset - 2.3 GHz disabled)}'"
-python3 ../scripts/gen_mt76_patch.py build_dir
-
-CTPATCH="package/kernel/mt76/patches/999-mercury-superchannels.patch"
-if [ ! -s "$CTPATCH" ]; then
-    echo "!!!! mt76 superchannel patch was not generated."
-    exit 1
-fi
-echo "Patch: $CTPATCH  ($(wc -l < "$CTPATCH") lines)"
-
-# ---------------------------------------------------------------
-# Step 3b: Patch mt7915/init.c to enable HE160 in DBDC mode.
+# 999-mercury-superchannels.patch - replaced mt76_channels_5ghz[] with
+#   177 channels at 5 MHz spacing (ch20-222, 5100-6110 MHz). The MT7915E
+#   has no EEPROM calibration outside the standard plan, and cfg80211
+#   disables any channel whose centre +/- 10 MHz leaves the regulatory
+#   rule, so the bottom of that table was never usable:
+#       hostapd: Frequency 5100 (secondary) not allowed for AP mode, flags: 0x1
+#       hostapd: Configured channel (24) or frequency (5120) not found
+#                from the channel list of the current mode (2) IEEE 802.11a
+#       hostapd: Could not select hw_mode and channel. (-3)
+#   Stock mt76 already ships exactly the standard channel plan, so the
+#   fix is to ship it unpatched.
 #
-# MT7915E (single-chip DBDC) supports 160 MHz on 5 GHz even when
-# 2.4 GHz is simultaneously active, but the upstream driver guards
-# HE160 capability advertisement with !dev->dbdc_support. Remove
-# that guard so hostapd and the kernel see HE160 as a valid channel width.
-# With proper RF precalibration data loaded (Step 3c), the MCU handles
-# HE160 without timeouts.
+# 998-mt7915-he160-dbdc.patch - forced nss_160/sts_160 and the VHT160
+#   capability bits on even with dbdc_support set. The MT7915 cannot do
+#   160 MHz while both bands run off its single MCU; upstream says so in
+#   mt7915/init.c ("Can't do 160MHz with mt7915 dbdc"). With the guard
+#   removed the driver pushes 160-capable station records the MCU never
+#   answers, and radio bring-up wedges:
+#       mt7915e: Retry message 000007ed (seq 15)
+#       mt7915e: Message 000007ed (seq 15) timeout
+#       hostapd: Could not set interface phy1-ap0 flags (UP): Operation timed out
+#       ieee80211 phy1: Hardware restart was requested
+#   Both bands share the MCU, so 2.4 GHz died with it - the AP came up
+#   with phy1-ap0 at 0.00 dBm and no SSID at all. This failed on plain
+#   channel 36 / HE80 too, which is what proves it is the capability
+#   advertisement and not the channel. 5 GHz therefore runs HE80, which
+#   is also the widest mode mobile clients reliably scan and join.
 # ---------------------------------------------------------------
 echo "======================================="
-echo "Step 3b: Patching mt7915 HE160 DBDC restriction..."
+echo "Step 3: Removing superchannel and HE160-DBDC driver patches..."
 echo "======================================="
-python3 ../scripts/gen_mt7915_he160_patch.py build_dir
-HE160PATCH="package/kernel/mt76/patches/998-mt7915-he160-dbdc.patch"
-if [ -s "$HE160PATCH" ]; then
-    echo "Patch: $HE160PATCH  ($(wc -l < "$HE160PATCH") lines)"
-else
-    echo "NOTE: HE160 patch not generated (non-fatal; driver may already be OK or pattern changed)."
-fi
+rm -fv package/kernel/mt76/patches/999-mercury-superchannels.patch \
+       package/kernel/mt76/patches/998-mt7915-he160-dbdc.patch 2>/dev/null || true
+for STALE in 999-mercury-superchannels 998-mt7915-he160-dbdc; do
+    if [ -e "package/kernel/mt76/patches/$STALE.patch" ]; then
+        echo "!!!! package/kernel/mt76/patches/$STALE.patch still present after removal."
+        exit 1
+    fi
+done
+echo "OK: mt76 ships the stock standard channel table and no HE160 override."
 
 # ---------------------------------------------------------------
-# Step 3c: Patch mt7915/eeprom.c to add precal fallback.
+# Step 3b: Patch mt7915/eeprom.c to add precal fallback.
 #
 # Ensures the driver automatically falls back to loading the 105,488
 # bytes of RF precalibration data from mt7915_eeprom_dbdc.bin if the
 # flash partition is uncalibrated or NVMEM cells fail.
 # ---------------------------------------------------------------
 echo "======================================="
-echo "Step 3c: Patching mt7915 eeprom.c precal fallback..."
+echo "Step 3b: Patching mt7915 eeprom.c precal fallback..."
 echo "======================================="
 python3 ../scripts/gen_mt7915_precal_patch.py build_dir
 PRECALPATCH="package/kernel/mt76/patches/997-mt7915-precal-fallback.patch"
@@ -106,21 +104,49 @@ else
     echo "NOTE: Precal fallback patch not generated (non-fatal; pattern changed)."
 fi
 
+# The fallback reads precal out of mt7915_eeprom_dbdc.bin at offset 0xe10,
+# so that blob has to carry the calibration and not just the 3,584-byte
+# EEPROM image. 0xe10 + 105488 = 109088 bytes is the whole thing. A short
+# file makes the "fw->size >= offs + size" guard fail silently, the driver
+# runs with dev->cal == NULL, and the MCU then times out configuring the
+# radio - the same "Message ... (seq 15) timeout" that killed both bands.
+# The same blob is what files/etc/uci-defaults/25-restore-factory-calibration
+# writes back to the Factory partition, so a short file breaks that too.
+CALBIN="files/lib/firmware/mediatek/mt7915_eeprom_dbdc.bin"
+CALMIN=109088
+if [ ! -f "$CALBIN" ]; then
+    echo "!!!! $CALBIN missing - no RF calibration to fall back on."
+    exit 1
+fi
+CALSZ=$(wc -c < "$CALBIN")
+CALHDR=$(od -An -tx1 -N2 "$CALBIN" | tr -d ' \n')
+echo "calibration blob : $CALBIN ($CALSZ bytes, header $CALHDR)"
+if [ "$CALSZ" -lt "$CALMIN" ]; then
+    echo "!!!! $CALBIN is $CALSZ bytes, need at least $CALMIN."
+    echo "     It carries only the EEPROM image, not the 105,488 bytes of"
+    echo "     precal data at offset 0xe10, so the fallback cannot fire."
+    exit 1
+fi
+if [ "$CALHDR" != "1579" ]; then
+    echo "!!!! $CALBIN starts with '$CALHDR', expected '1579' (MT7915 EEPROM magic)."
+    echo "     25-restore-factory-calibration keys off this magic, so a blob"
+    echo "     with the wrong header would be written to Factory and rejected."
+    exit 1
+fi
+echo "  OK: calibration blob carries EEPROM + precal."
+
 # Force mt76 to be re-extracted AND re-patched on the next build.
 #
 # `make package/kernel/mt76/clean` for a KERNEL package only removes the
 # install stamps (.mt76_installed, mt76.list) - it leaves the extracted
 # source tree and its ".prepared_<hash>" stamp in place. With that stamp
 # present, the full build in Step 5 SKIPS the Prepare (extract+patch)
-# phase entirely, so the just-generated 999 patch is never applied and
-# the driver ships the stock 28-channel table (this is exactly the
+# phase entirely, so patches/ is never re-applied (this is exactly the
 # "patch did not reach this build" failure seen on run 7f446af).
 #
-# Deleting the prepared source dir removes that stamp, so the next `make`
-# re-extracts mt76 from the tarball and applies every patch in patches/
-# in order - including 999-mercury-superchannels.patch, which is a diff
-# against the fully-prepared tree and therefore applies cleanly as the
-# last patch.
+# That cuts both ways now: a stale tree prepared by an earlier run still
+# carries the 998/999 patches Step 3 just deleted, so removing it is what
+# makes their removal actually reach the driver.
 make package/kernel/mt76/clean V=s 2>&1 | tail -5
 echo "Forcing mt76 re-extract by removing the prepared source dir(s):"
 rm -rfv build_dir/target-*/linux-*/mt76-* 2>/dev/null | tail -3
@@ -128,24 +154,22 @@ if ls build_dir/target-*/linux-*/mt76-* >/dev/null 2>&1; then
     echo "!!!! mt76 source dir still present after removal - re-patch may be skipped."
     exit 1
 fi
-echo "OK: mt76 prepared source removed; Step 5 will re-extract and apply 999."
+echo "OK: mt76 prepared source removed; Step 5 will re-extract from the tarball."
 
 # ---------------------------------------------------------------
-# Step 4: Apply kernel regulatory bypass patches.
+# There is deliberately no kernel net/wireless/reg.c patching step.
 #
-# Patches net/wireless/reg.c (expand world domain, strip NO_IR /
-# NO_OFDM / DFS flags) and net/wireless/util.c (unsigned channel
-# arithmetic for channels 169/173/177 coded as > 127).
-# Runs from build_dir to find both the kernel tree and the
-# mac80211 backports copy in one pass.
-# ---------------------------------------------------------------
-echo "======================================="
-echo "Step 4: Applying extended spectrum patches (kernel reg)..."
-echo "======================================="
-cd build_dir
-bash ../../scripts/mercury-07-superchannel.sh
-cd ..
-
+# mercury-07-superchannel.sh used to widen the compiled-in world domain
+# to 4910-6120 MHz and strip NL80211_RRF_NO_IR / NO_OFDM / DFS out of
+# reg.c by regex. That existed only to make the superchannel table
+# usable when regulatory.db failed to load. With the standard plan the
+# custom database in Step 1 already grants every channel the driver
+# exposes - verified on the device:
+#     country YE: DFS-UNSET
+#         (2402 - 2482 @ 40), (N/A, 30), (N/A)
+#         (5170 - 5330 @ 160), (N/A, 30), (N/A)
+# so the regex surgery buys nothing and its failure mode (a desynchronised
+# brace in kernel source) is far worse than the fallback it guarded.
 # ---------------------------------------------------------------
 # Step 5: Full compilation.
 # ---------------------------------------------------------------
@@ -175,12 +199,15 @@ if [ "${PIPESTATUS[0]}" -ne 0 ]; then
 fi
 
 # ---------------------------------------------------------------
-# Step 6: Verify the shipped mt76 driver carries the extended
-# channel table.
+# Step 6: Verify the shipped mt76 driver carries the STOCK standard
+# channel table and no HE160-in-DBDC override.
 #
-# After the full build, the mt76 mac80211.c in build_dir reflects
-# the patched source. Count CHAN5G() entries to confirm the patch
-# was applied (stock ~28, patched 68).
+# After the full build, the mt76 mac80211.c in build_dir reflects the
+# source that was actually compiled. This step used to demand 177
+# CHAN5G() entries; it now demands the opposite, because the extended
+# table is what broke the radio. Checking the compiled source rather
+# than the patches directory is the point - a patch can be deleted from
+# package/ and still reach the build through a stale prepared tree.
 # ---------------------------------------------------------------
 echo "======================================="
 echo "Step 6: Verifying mt76 channel table in shipped driver..."
@@ -220,19 +247,59 @@ fi
 # kind of off-by-one that turns a threshold check into a coin flip.
 CHAN5G_COUNT=$(grep -cE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" 2>/dev/null || true)
 echo "mt76 package source : $MT76_MAC"
-echo "CHAN5G entries      : $CHAN5G_COUNT  (stock 28, patched 177)"
-if [ "${CHAN5G_COUNT:-0}" -lt 170 ]; then
-    echo "!!!! The mt76 package still carries only $CHAN5G_COUNT CHAN5G entries (expected 177),"
-    echo "     so 999-mercury-superchannels.patch did NOT apply. The driver"
-    echo "     would expose fewer channels than the regdb allows and every"
-    echo "     extended channel would fail silently on the device."
+echo "CHAN5G entries      : $CHAN5G_COUNT  (stock standard plan is ~28)"
+if [ "${CHAN5G_COUNT:-0}" -gt 60 ]; then
+    echo "!!!! The mt76 package carries $CHAN5G_COUNT CHAN5G entries - far more"
+    echo "     than the ~28 of the standard plan, so a superchannel table"
+    echo "     reached this build. Those channels have no EEPROM calibration"
+    echo "     and hostapd refuses them at AP bring-up."
     echo "--- patches present in the package ---"
     ls -l package/kernel/mt76/patches/ 2>/dev/null || echo "(no patches dir)"
-    echo "--- first lines of our patch ---"
-    head -12 package/kernel/mt76/patches/999-mercury-superchannels.patch 2>/dev/null
     exit 1
 fi
-echo "OK: mt76 package carries the extended $CHAN5G_COUNT-channel table."
+
+# The count alone would not catch a table that kept 28 entries but moved
+# them off-plan, so check the actual frequencies too. Anything below
+# 5170 or above 5835 is outside the regulatory rules Step 1 generates and
+# would be disabled by cfg80211 the moment it was selected.
+OFFPLAN=$(grep -oE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" \
+    | grep -oE '[0-9]+\)$' | tr -d ')' \
+    | awk '$1 < 5170 || $1 > 5835' | sort -u | tr '\n' ' ')
+if [ -n "$OFFPLAN" ]; then
+    echo "!!!! mt76 exposes 5 GHz frequencies outside the standard plan: $OFFPLAN"
+    echo "     The regulatory database only grants 5170-5330, 5490-5730 and"
+    echo "     5735-5835 MHz, so these would be dead channels on the device."
+    exit 1
+fi
+
+# HE160 must stay guarded by dbdc_support. With the guard gone the driver
+# advertises 160 MHz, hostapd builds 160-capable station records, and the
+# single MCU shared by both bands stops answering:
+#     mt7915e: Message 000007ed (seq 15) timeout
+#     ieee80211 phy1: Hardware restart was requested
+#
+# Grep for the upstream comment, not for "dbdc_support" - that identifier
+# appears a dozen times in this file for unrelated reasons and would
+# report OK with the override fully applied. This one line sits directly
+# above the "nss_160 = 0" the override replaces, so it is present exactly
+# when the guard is.
+MT7915_INIT="$MT76_PKG_DIR/mt7915/init.c"
+if [ ! -f "$MT7915_INIT" ]; then
+    echo "!!!! $MT7915_INIT not found - cannot confirm the HE160 guard."
+    exit 1
+fi
+if grep -qF "Can't do 160MHz with mt7915 dbdc" "$MT7915_INIT"; then
+    echo "OK: mt7915/init.c still guards 160 MHz on dbdc_support."
+else
+    echo "!!!! mt7915/init.c no longer carries the 'Can't do 160MHz with"
+    echo "     mt7915 dbdc' guard, so the HE160 override reached this build."
+    echo "     The MCU will wedge during 5 GHz bring-up and take 2.4 GHz"
+    echo "     down with it. Check package/kernel/mt76/patches/ for a"
+    echo "     998-mt7915-he160-dbdc.patch and for a stale prepared tree."
+    grep -n 'nss_160' "$MT7915_INIT" | head -10
+    exit 1
+fi
+echo "OK: mt76 package carries the standard $CHAN5G_COUNT-channel table."
 
 # Prove the PATCHED source is what actually got compiled: a module must
 # exist inside this same package tree. Counting channels in a source
@@ -613,9 +680,14 @@ STEP 4 (OPTIONAL) - wipe NAND before flashing
                permanently and it cannot be regenerated.
 
 AFTER FLASHING - confirm the build is complete
-      mercury-wifi-check            # channels, 160 MHz, power, firmware blobs
-      iw phy phy1 info | grep -A2 "160 MHz"
+      mercury-wifi-check            # channels, power, firmware blobs
+      iw dev                        # both phy0-ap0 and phy1-ap0 must show an SSID
       grep -c processor /proc/cpuinfo    # expect 4
+
+  5 GHz runs HE80, not HE160. The MT7915 drives both bands from one MCU
+  and cannot serve 160 MHz while 2.4 GHz is up - forcing it made the MCU
+  stop answering and took both radios down. HE80 is also the widest mode
+  phones reliably scan and join.
 HOWTO
 echo "  OK: HOW_TO_USE.txt written"
 
@@ -641,6 +713,9 @@ if [ -n "$GITHUB_STEP_SUMMARY" ]; then
         echo "Flash \`*-squashfs-sysupgrade.bin\` **without** \"Keep settings\","
         echo "then run \`mercury-wifi-check\` over SSH to confirm the radios came up."
         echo
-        echo "mt76 channel table: **$CHAN5G_COUNT channels** (stock ~28, superchannel 177)"
+        echo "mt76 channel table: **$CHAN5G_COUNT channels** (standard plan, 5170-5835 MHz)"
+        echo
+        echo "5 GHz runs HE80. The MT7915 shares one MCU between both bands and"
+        echo "cannot do 160 MHz while 2.4 GHz is up, so HE160 stays off."
     } >> "$GITHUB_STEP_SUMMARY"
 fi

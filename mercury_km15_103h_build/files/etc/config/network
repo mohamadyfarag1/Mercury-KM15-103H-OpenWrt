@@ -5,7 +5,6 @@ config interface 'loopback'
 	option netmask '255.0.0.0'
 
 config globals 'globals'
-	option ula_prefix 'fd8b:e35d:2724::/48'
 	option packet_steering '1'
 
 config device
@@ -27,3 +26,7 @@ config interface 'lan'
 config interface 'wan'
 	option device 'wan'
 	option proto 'dhcp'
+
+# No 'wan6' interface and no ula_prefix: this build is IPv4 only. OpenWrt
+# creates wan6 by default, which brings up odhcp6c and starts soliciting
+# router advertisements on the WAN even when nothing answers.

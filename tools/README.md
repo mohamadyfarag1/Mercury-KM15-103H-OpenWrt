@@ -48,14 +48,14 @@ Two ways, both covered by the token above:
 
 1. **Push** - the workflow runs automatically on any push that touches
    `mercury_km15_103h_build/**`, `scripts/mercury-*.sh`,
-   `scripts/gen_mt76_patch.py`, or the workflow file itself.
+   or the workflow file itself.
    `concurrency: cancel-in-progress` means a newer push cancels the older run.
 2. **Manual** - `python3 tools/ci.py build` calls the `workflow_dispatch`
    trigger directly, no commit needed. Use this to rebuild the same commit.
 
 ## 5. Artifacts a green build produces
 
-- `Mercury_KM15-103H_SuperFirmware_HE160` - the `*-sysupgrade.bin` to flash
+- `Mercury_KM15-103H_Firmware` - the `*-sysupgrade.bin` to flash
 - `Mercury_KM15-103H_UART_Recovery` - `u-boot.bin` + `*-initramfs-kernel.bin`
   + `HOW_TO_USE.txt` for UART Ymodem recovery
 

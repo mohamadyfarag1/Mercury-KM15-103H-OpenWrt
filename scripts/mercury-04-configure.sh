@@ -52,52 +52,17 @@ if [ -f "files/lib/netifd/hostapd.sh" ]; then
     cp -f files/lib/netifd/hostapd.sh package/network/config/wifi-scripts/files/lib/netifd/hostapd.sh 2>/dev/null || true
 fi
 
-# Inject hostapd SuperChannel patch to allow 5900MHz+ and 2.3-2.732GHz
-mkdir -p package/network/services/hostapd/patches
-cat << 'EOF' > package/network/services/hostapd/patches/999-mercury-superchannels.patch
---- a/src/common/ieee802_11_common.c
-+++ b/src/common/ieee802_11_common.c
-@@ -1519,6 +1519,33 @@ enum hostapd_hw_mode
- 	if (sec_channel > 1 || sec_channel < -1)
- 		return NUM_HOSTAPD_MODES;
- 
-+	/* Mercury: 2.3 GHz SuperChannels (2312 - 2407 MHz) -> channels 237..256 */
-+	if (freq >= 2312 && freq <= 2407) {
-+		if ((freq - 2312) % 5)
-+			return NUM_HOSTAPD_MODES;
-+		*channel = 237 + (freq - 2312) / 5;
-+		*op_class = 81;
-+		return HOSTAPD_MODE_IEEE80211G;
-+	}
-+
-+	/* Mercury: 2.4 GHz transition channels (2477 - 2507 MHz) -> channels 74..80 */
-+	if (freq >= 2477 && freq <= 2507 && freq != 2484) {
-+		if ((freq - 2477) % 5)
-+			return NUM_HOSTAPD_MODES;
-+		*channel = 74 + (freq - 2477) / 5;
-+		*op_class = 81;
-+		return HOSTAPD_MODE_IEEE80211G;
-+	}
-+
-+	/* Mercury: Upper 2.5 - 2.732 GHz SuperChannels (2512 - 2732 MHz) -> channels 15..59 */
-+	if (freq >= 2512 && freq <= 2732) {
-+		if ((freq - 2437) % 5)
-+			return NUM_HOSTAPD_MODES;
-+		*channel = (freq - 2437) / 5;
-+		*op_class = 81;
-+		return HOSTAPD_MODE_IEEE80211G;
-+	}
-+
- 	if (freq >= 2412 && freq <= 2472) {
- 		if ((freq - 2407) % 5)
- 			return NUM_HOSTAPD_MODES;
-@@ -1650,4 +1677,4 @@ enum hostapd_hw_mode
--	if (freq >= 5000 && freq < 5900) {
-+	if (freq >= 5000 && freq <= 6110 && freq != 5935) {
- 		if ((freq - 5000) % 5)
- 			return NUM_HOSTAPD_MODES;
- 		*channel = (freq - 5000) / 5;
-EOF
+# hostapd ships unpatched: the device runs the standard channel plan only.
+#
+# The old 999-mercury-superchannels.patch taught ieee80211_freq_to_channel_ext()
+# about 2312-2407, 2477-2507, 2512-2732 and 5000-6110 MHz. Those frequencies
+# have no EEPROM calibration on this board and the regulatory database no
+# longer grants them, so every one of them failed at AP bring-up:
+#     "Frequency 5100 (secondary) not allowed for AP mode, flags: 0x1"
+#     "Configured channel (24) or frequency (5120) not found ... IEEE 802.11a"
+# Leaving the patch in place while the channels are unusable only moves the
+# failure later, so it is removed rather than disabled.
+rm -f package/network/services/hostapd/patches/999-mercury-superchannels.patch
 
 
 echo "Writing target .config for Mercury KM15-103H..."
@@ -155,6 +120,28 @@ CONFIG_PACKAGE_block-mount=y
 CONFIG_PACKAGE_e2fsprogs=y
 CONFIG_PACKAGE_fdisk=y
 CONFIG_PACKAGE_usbutils=y
+
+# IPv6 removed - this is an IPv4-only build.
+#
+# OpenWrt pulls odhcpd, odhcp6c, ip6tables and the kernel IPv6 stack in by
+# default through DEFAULT_PACKAGES, so switching them off has to be
+# explicit; deleting the uci sections alone leaves the daemons installed
+# and running. CONFIG_IPV6=n is what actually drops the in-kernel stack,
+# and the rest stops the userland from being built against it.
+# CONFIG_IPV6 is not set
+# CONFIG_PACKAGE_odhcpd-ipv6only is not set
+# CONFIG_PACKAGE_odhcp6c is not set
+# CONFIG_PACKAGE_kmod-ipv6 is not set
+# CONFIG_PACKAGE_kmod-ip6tables is not set
+# CONFIG_PACKAGE_kmod-nf-ipt6 is not set
+# CONFIG_PACKAGE_kmod-nft-nat6 is not set
+# CONFIG_PACKAGE_ip6tables is not set
+# CONFIG_PACKAGE_ip6tables-nft is not set
+# CONFIG_PACKAGE_luci-proto-ipv6 is not set
+# CONFIG_PACKAGE_6in4 is not set
+# CONFIG_PACKAGE_6rd is not set
+# CONFIG_PACKAGE_6to4 is not set
+# CONFIG_PACKAGE_ds-lite is not set
 
 # Base filesystem
 CONFIG_TARGET_ROOTFS_SQUASHFS=y
@@ -217,7 +204,7 @@ if ! grep -q '^CONFIG_TARGET_ramips_mt7621_DEVICE_mercury_km15-103h=y' .config; 
 	echo ""
 	echo "--- First 30 ramips/mt7621 device symbols known to Kconfig (for comparison) ---"
 	grep 'CONFIG_TARGET_ramips_mt7621_DEVICE_' .config | head -30
-	echo "Bypassing exit 1"
+	exit 1
 fi
 echo "✅ Device symbol confirmed enabled."
 
@@ -281,7 +268,39 @@ if [ -n "$MISSING" ]; then
 		echo "--- lines mentioning ${SYM#CONFIG_PACKAGE_} in .config ---"
 		grep -i "${SYM#CONFIG_PACKAGE_}" .config | head -5 || echo "(symbol unknown to Kconfig at all)"
 	done
-	echo "Bypassing exit 1"
+	exit 1
+fi
+
+# ---------------------------------------------------------------
+# Confirm IPv6 really is gone.
+#
+# The "# CONFIG_X is not set" lines above are a request, not a result.
+# Anything still listed in the target's DEFAULT_PACKAGES, or pulled in as
+# a dependency of a package we do want, comes back with =y and defconfig
+# says nothing. Deleting the uci sections while odhcpd is still installed
+# leaves the daemon running with its own defaults, which is the failure
+# this catches.
+# ---------------------------------------------------------------
+echo ""
+echo "Verifying IPv6 was dropped..."
+IPV6_LEFT=""
+for SYM in CONFIG_IPV6 CONFIG_PACKAGE_odhcpd-ipv6only CONFIG_PACKAGE_odhcp6c \
+           CONFIG_PACKAGE_kmod-ipv6 CONFIG_PACKAGE_ip6tables; do
+	if grep -q "^${SYM}=y" .config; then
+		echo "  STILL ON : $SYM"
+		IPV6_LEFT="$IPV6_LEFT $SYM"
+	else
+		echo "  OK       : $SYM disabled"
+	fi
+done
+if [ -n "$IPV6_LEFT" ]; then
+	echo ""
+	echo "❌ ERROR: IPv6 survived defconfig:$IPV6_LEFT"
+	echo "   Something in DEFAULT_PACKAGES or a dependency re-selected it."
+	echo "   Find what pulls it in before shipping - an IPv4-only config"
+	echo "   against an IPv6-enabled image gives a router that still"
+	echo "   solicits on the WAN with no configuration behind it."
+	exit 1
 fi
 
 # ---------------------------------------------------------------
@@ -302,7 +321,7 @@ echo "Verifying NAND + bad-block remapping support in the target kernel config..
 KCFG=$(ls target/linux/ramips/mt7621/config-* 2>/dev/null | head -1)
 if [ -z "$KCFG" ]; then
 	echo "❌ ERROR: no target/linux/ramips/mt7621/config-* found."
-	echo "Bypassing exit 1"
+	exit 1
 fi
 echo "  using $KCFG"
 # Ensure custom regulatory database is unconditionally accepted by disabling signature enforcement
@@ -324,7 +343,7 @@ if [ -n "$NAND_MISSING" ]; then
 	echo "   that provides NMBM. Building without them yields firmware that"
 	echo "   cannot read the factory MAC and may not mount UBI at all."
 	grep -n 'MTK_BMT\|NAND_MT7621\|NMBM' "$KCFG" || echo "(no related symbols in this config)"
-	echo "Bypassing exit 1"
+	exit 1
 fi
 
 # Not fatal on its own, but the whole first-install / brick-recovery plan

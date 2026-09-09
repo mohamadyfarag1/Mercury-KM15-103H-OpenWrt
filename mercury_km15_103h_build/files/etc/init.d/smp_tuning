@@ -7,8 +7,12 @@
 # Workload Distribution:
 #   CPU 0 (Mask 0x1): OS Kernel, Netifd, LuCI Web UI, Hostapd Management, DNS/DHCP
 #   CPU 1 (Mask 0x2): Gigabit Ethernet & MT7530 Switch Queues
-#   CPU 2 (Mask 0x4): MT7915E PCIe Host Interface (HIF) Bus Transactions
-#   CPU 3 (Mask 0x8): MT7915E Wi-Fi Radio Processing & Hardware Crypto Acceleration
+#   CPU 2 (Mask 0x4): MT7915E PCIe Host Interface (HIF) + Hardware Crypto
+#   CPU 3 (Mask 0x8): MT7915E Wi-Fi Radio Processing (the hot path)
+#
+# Verify with:  for i in /proc/irq/*/smp_affinity; do echo "$i $(cat $i)"; done
+# Expect mt7915e-hif on 4 and mt7915e on 8 - if both read 8, this script
+# did not run or its patterns stopped matching.
 #
 # Packet Steering (RPS & XPS):
 #   Spreads network & Wi-Fi flow hash processing across Cores 1, 2, 3 (Mask 0xE)
@@ -32,22 +36,34 @@ start() {
         [ -d "/proc/irq/$irq" ] && echo 2 > "/proc/irq/$irq/smp_affinity" 2>/dev/null
     done
 
-    # 3. Distribute Wi-Fi PCIe HIF IRQ (mt7915e-hif) -> CPU 2 (Mask 4)
-    local hif_irq=$(awk -F: '/mt7915e-hif/ {print $1}' /proc/interrupts | tr -d ' ')
+    # 3. Wi-Fi PCIe HIF IRQ (mt7915e-hif) -> CPU 2 (Mask 4)
+    #
+    # Both WiFi patterns are anchored with $. /proc/interrupts names the
+    # two interrupts "mt7915e-hif" and "mt7915e", so an unanchored
+    # /mt7915/ matches BOTH - which is what step 4 used to do. It ran
+    # after this one and overwrote the HIF affinity, landing the bus
+    # interface and the radio on CPU 3 together while CPU 2 sat idle:
+    #     irq 31 aff=8  mt7915e-hif      (should have been 4)
+    #     irq 32 aff=8  mt7915e
+    local hif_irq=$(awk -F: '$0 ~ /mt7915e-hif$/ {print $1}' /proc/interrupts | tr -d ' ')
     for irq in $hif_irq; do
         [ -d "/proc/irq/$irq" ] && echo 4 > "/proc/irq/$irq/smp_affinity" 2>/dev/null
     done
 
-    # 4. Distribute Wi-Fi Radio IRQ (mt7915e) -> CPU 3 (Mask 8)
-    local wifi_irq=$(awk -F: '/(mt7915e$|mt7915)/ {print $1}' /proc/interrupts | tr -d ' ')
+    # 4. Wi-Fi Radio IRQ (mt7915e) -> CPU 3 (Mask 8)
+    local wifi_irq=$(awk -F: '$0 ~ /mt7915e$/ {print $1}' /proc/interrupts | tr -d ' ')
     for irq in $wifi_irq; do
         [ -d "/proc/irq/$irq" ] && echo 8 > "/proc/irq/$irq/smp_affinity" 2>/dev/null
     done
 
-    # 5. Distribute Hardware Crypto Engine IRQ (1e004000.crypto) -> CPU 3 (Mask 8)
-    local crypto_irq=$(awk -F: '/(1e004000\.crypto|crypto)/ {print $1}' /proc/interrupts | tr -d ' ')
+    # 5. Hardware Crypto Engine IRQ (1e004000.crypto) -> CPU 2 (Mask 4)
+    #
+    # Pairs with the HIF rather than the radio. The radio IRQ carries the
+    # entire WiFi datapath (27,990 interrupts against the HIF's 0 on a
+    # quiet box), so CPU 3 is the one core that must not share.
+    local crypto_irq=$(awk -F: '$0 ~ /crypto$/ {print $1}' /proc/interrupts | tr -d ' ')
     for irq in $crypto_irq; do
-        [ -d "/proc/irq/$irq" ] && echo 8 > "/proc/irq/$irq/smp_affinity" 2>/dev/null
+        [ -d "/proc/irq/$irq" ] && echo 4 > "/proc/irq/$irq/smp_affinity" 2>/dev/null
     done
 
     # 6. Enable Receive Packet Steering (RPS) across CPU 1, 2, 3 (Mask 0xE = 14)

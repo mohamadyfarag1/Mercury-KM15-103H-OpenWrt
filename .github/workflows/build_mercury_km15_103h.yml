@@ -1,4 +1,4 @@
-name: Build Custom OpenWrt for Mercury KM15-103H (HE160 Superchannel)
+name: Build Custom OpenWrt for Mercury KM15-103H
 
 # Re-trigger build on public repository
 on:
@@ -8,12 +8,6 @@ on:
       - 'scripts/**'
       - '.github/workflows/build_mercury_km15_103h.yml'
   workflow_dispatch:
-    inputs:
-      enable_23ghz:
-        description: 'Add EXPERIMENTAL 2.3 GHz channels (2312-2402 MHz). The MT7915E RF front end is built for 2.4 GHz and has no calibration below it - these may not radiate. Measure before trusting.'
-        type: boolean
-        required: false
-        default: false
 
 # Two pushes in quick succession would otherwise run two full ~35 minute
 # builds against the same cache, uploading two artifacts with the same
@@ -102,11 +96,7 @@ jobs:
           cd openwrt
           make download -j8
 
-      - name: Compile Firmware (regdb + superchannel patches + build + verify)
-        env:
-          # Empty unless the run was dispatched with the 2.3 GHz box ticked.
-          # gen_mt76_patch.py and mercury-07-superchannel.sh both read this.
-          MERCURY_ENABLE_23GHZ: ${{ inputs.enable_23ghz && '1' || '' }}
+      - name: Compile Firmware (regdb + precal fallback + build + verify)
         run: bash scripts/mercury-05-compile.sh
 
       # What actually shipped, on the run page instead of buried in the
@@ -140,7 +130,7 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: Mercury_KM15-103H_SuperFirmware_HE160
+          name: Mercury_KM15-103H_Firmware
           path: |
             openwrt/bin/targets/ramips/mt7621/*mercury_km15-103h*.bin
             openwrt/bin/targets/ramips/mt7621/*mercury_km15-103h*.manifest

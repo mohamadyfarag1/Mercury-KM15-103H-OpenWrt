@@ -3,10 +3,15 @@
 # Script 6: Generate Custom Unlocked Regulatory DB
 # =============================================
 # Runs from the repository root. Clones wireless-regdb, generates
-# a db.txt that gives every country the full 5115-5930 MHz range
-# at 160 MHz / 33 dBm (no DFS flag, no NO_IR), signs it, and
-# drops the resulting regulatory.db into openwrt/files/ so OpenWrt
-# bundles it into the squashfs instead of the stock restricted one.
+# a db.txt that gives every country the STANDARD 2.4/5 GHz channel
+# plan at 30 dBm with no DFS flag and no NO_IR, signs it, and drops
+# the resulting regulatory.db into openwrt/files/ so OpenWrt bundles
+# it into the squashfs instead of the stock restricted one.
+#
+# The point of the custom database is uniform power and no radar
+# hold-off across countries - NOT extra spectrum. Channels outside
+# the standard plan have no EEPROM calibration on the MT7915E and
+# were removed after every one of them failed at AP bring-up.
 # =============================================
 set -e
 
@@ -51,14 +56,20 @@ countries = [
 with open('db.txt', 'w') as f:
     for c in countries:
         f.write('country %s:\n' % c)
-        # 2.4 GHz: 2182-2750 covers ch1-13 + ch12,13,14 + extended 2.3/2.5 bands
-        # 5 GHz: plan is ch20..222 = 5100..6110 MHz in 5 MHz steps.
-        #   cfg80211 requires centre ± 10 MHz inside rule → floor ≤ 5110, ceil ≥ 6010.
-        #   For HE160 / VHT160 the outermost sub-channel must also fit:
-        #   lowest 160 MHz block has sub-channels starting at 5120, centre needs 5110+ ✓
-        #   highest block top sub-channel 6110 needs ceil ≥ 6010 → 6130 gives margin.
-        f.write('\t(2182 - 2750 @ 40), (33)\n')
-        f.write('\t(5100 - 6130 @ 160), (33)\n')
+        # Standard channel plan only. A rule must contain the whole channel,
+        # not just its centre: cfg80211 disables any channel whose centre ± 10
+        # MHz falls outside, which is exactly why the old 5100 floor killed the
+        # bottom of the band ("Frequency 5100 (secondary) not allowed for AP
+        # mode") even though 5100 was nominally inside the rule. Every edge
+        # below is therefore a real band edge, not a channel centre.
+        #   2402-2482  : 2.4 GHz ch1-13
+        #   5170-5330  : UNII-1 + UNII-2A, ch36-64
+        #   5490-5730  : UNII-2C, ch100-144
+        #   5735-5835  : UNII-3, ch149-165
+        f.write('\t(2402 - 2482 @ 40), (30)\n')
+        f.write('\t(5170 - 5330 @ 160), (30)\n')
+        f.write('\t(5490 - 5730 @ 160), (30)\n')
+        f.write('\t(5735 - 5835 @ 80), (30)\n')
         f.write('\n')
 print('Generated db.txt with %d countries' % len(countries))
 PYEOF

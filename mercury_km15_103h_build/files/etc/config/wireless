@@ -4,11 +4,17 @@ config wifi-device 'radio0'
 	option channel '1'
 	option band '2g'
 	option htmode 'HE20'
-	option country 'YE'
+	option country 'US'
 	option country_ie '0'
 	option doth '0'
 	option cell_density '0'
-	option txpower '23'
+	# 26 dBm is this board's measured ceiling on 2.4 GHz, read back from
+	# the radio itself: "iw phy phy0 set txpower fixed 3000" (30 dBm) is
+	# accepted and then reported as 26.00 dBm. The limit is the EEPROM
+	# power table and the MT7915E's integrated PA, not the regulatory
+	# database - which already grants 30 - so asking for more only gets
+	# silently clamped back to this number.
+	option txpower '26'
 	option noscan '1'
 	option airmax_compat '1'
 	option disabled '0'
@@ -25,12 +31,15 @@ config wifi-device 'radio1'
 	option path '1e140000.pcie/pci0000:00/0000:00:01.0/0000:02:00.0+1'
 	option channel '36'
 	option band '5g'
-	option htmode 'HE160'
-	option country 'YE'
+	option htmode 'HE80'
+	option country 'US'
 	option country_ie '0'
 	option doth '0'
 	option cell_density '0'
-	option txpower '23'
+	# 24 dBm is the per-channel ceiling the driver reports for every 5 GHz
+	# channel in "iw phy phy1 info". Same story as radio0: the cap is the
+	# EEPROM power table, so a larger number here changes nothing.
+	option txpower '24'
 	option noscan '1'
 	option airmax_compat '1'
 	option disabled '0'
