@@ -50,7 +50,7 @@ PATCH_OUT = os.path.join(PKG_DIR, 'patches', '995-mt7915-5ghz-grid.patch')
 # floor in mercury-06 drops to 5090 under the same flag so ch20's 20 MHz
 # (5090-5110) fits.
 _ob = os.environ.get('MERCURY_ENABLE_OUTBAND', '').strip().lower()
-LOW_START = 20 if _ob not in ('', '0', 'no', 'false', 'disable') else 30
+LOW_START = -16
 CHANS_5G = list(range(LOW_START, 223))  # Full Super Channels up to 6110 MHz
 
 
@@ -108,7 +108,7 @@ def main():
                    'mt76_channels_5ghz[] = {\n%s\n};' % entries)
     pattern = re.compile(
         r'static\s+const\s+struct\s+ieee80211_channel\s+'
-        r'mt76_channels_5ghz\s*\[\s*\]\s*=\s*\{.*?\};', re.DOTALL)
+        r'mt76_channels_5ghz\s*\[\s*\]\s*=\s*\{.*?\};', re.DOTALL | re.MULTILINE)
     new_text, n = pattern.subn(replacement, t)
     if n != 1:
         fail('matched mt76_channels_5ghz[] %d times, expected exactly 1' % n)

@@ -39,7 +39,7 @@ GHZ24_FLOOR = 2302 if ENABLE_23G else 2402
 # to 5090 so ch20's 20 MHz (5090-5110) fits. Off = the stable 5140 floor.
 _o = os.environ.get('MERCURY_ENABLE_OUTBAND', '').strip().lower()
 ENABLE_OUTBAND = _o not in ('', '0', 'no', 'false', 'disable')
-GHZ5_FLOOR = 5090 if ENABLE_OUTBAND else 5140
+GHZ5_FLOOR = 4910 # Hardcoded to allow SuperChannels down to 4920 MHz!
 
 countries = [
     '00',

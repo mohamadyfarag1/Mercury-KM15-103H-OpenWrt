@@ -84,7 +84,10 @@ for STALE in 999-mercury-superchannels 998-mt7915-he160-dbdc; do
         exit 1
     fi
 done
-echo "OK: mt76 ships the stock standard channel table and no HE160 override."
+echo "OK: Stale patches removed."
+
+echo "Step 3.1: Generating HE160-DBDC driver patch..."
+python3 ../scripts/gen_mt7915_he160_dbdc_patch.py build_dir
 
 # ---------------------------------------------------------------
 # Step 3b: Patch mt7915/eeprom.c to add precal fallback.
@@ -550,14 +553,10 @@ if [ ! -f "$MT7915_INIT" ]; then
     echo "!!!! $MT7915_INIT not found - cannot confirm the HE160 guard."
     exit 1
 fi
-if grep -qF "Can't do 160MHz with mt7915 dbdc" "$MT7915_INIT"; then
-    echo "OK: mt7915/init.c still guards 160 MHz on dbdc_support."
+if grep -qF "else if (1)" "$MT7915_INIT"; then
+    echo "OK: mt7915/init.c now FORCES 160 MHz in DBDC mode."
 else
-    echo "!!!! mt7915/init.c no longer carries the 'Can't do 160MHz with"
-    echo "     mt7915 dbdc' guard, so the HE160 override reached this build."
-    echo "     The MCU will wedge during 5 GHz bring-up and take 2.4 GHz"
-    echo "     down with it. Check package/kernel/mt76/patches/ for a"
-    echo "     998-mt7915-he160-dbdc.patch and for a stale prepared tree."
+    echo "!!!! mt7915/init.c still carries the 160MHz guard! The patch failed to apply!"
     grep -n 'nss_160' "$MT7915_INIT" | head -10
     exit 1
 fi

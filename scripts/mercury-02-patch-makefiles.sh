@@ -27,8 +27,9 @@ define Device/mercury_km15-103h
   SUPPORTED_DEVICES := mercury,km15-103h
   DEVICE_PACKAGES := kmod-mt7915e kmod-mt7915-firmware wpad-mbedtls uboot-envtools luci luci-ssl iwinfo wireless-regdb irqbalance
   KERNEL_INITRAMFS := $$(KERNEL)
-  IMAGES += factory.bin
+  IMAGES += factory.bin breedweb-factory.bin
   IMAGE/factory.bin := append-kernel | pad-to $$(KERNEL_SIZE) | append-ubi | check-size
+  IMAGE/breedweb-factory.bin := append-kernel | pad-to $$(KERNEL_SIZE) | append-ubi | check-size
   IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
 endef
 TARGET_DEVICES += mercury_km15-103h
