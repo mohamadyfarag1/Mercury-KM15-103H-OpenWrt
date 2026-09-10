@@ -1,7 +1,0 @@
-#!/bin/sh
-# Preserve existing user configuration across upgrades before template extraction
-if [ -s /etc/config/horus_controller ]; then
-    cp -f /etc/config/horus_controller /tmp/horus_controller.saved 2>/dev/null
-    cp -f /etc/config/horus_controller /etc/horus_controller.bak 2>/dev/null
-fi
-exit 0

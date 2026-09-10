@@ -1,6 +1,0 @@
-Package: luci-app-horus-client
-Version: 1.2.161
-Provides: luci-app-horus-client
-Architecture: all
-Maintainer: Horus Networks
-Description: Horus AP Client (Satellite Node)

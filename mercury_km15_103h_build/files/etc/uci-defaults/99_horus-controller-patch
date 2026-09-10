@@ -122,4 +122,7 @@ rm -rf /tmp/luci-* 2>/dev/null
 echo "${PKG_VER}" > /tmp/horus_pkg_version 2>/dev/null
 echo "${PKG_VER}" > /etc/horus_version 2>/dev/null
 
+# 6. Enable horus_client service on first boot
+/etc/init.d/horus_client enable 2>/dev/null || true
+
 exit 0

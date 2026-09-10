@@ -18,12 +18,6 @@ find files/etc/uci-defaults -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/lib -type f -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
 find files/www/cgi-bin -type f -exec chmod +x {} \; 2>/dev/null || true
 
-# Inject custom packages (including Horus Client Plugin)
-if [ -d "../package/luci-app-horus-client" ]; then
-    echo "Injecting luci-app-horus-client into openwrt/package..."
-    mkdir -p package/luci-app-horus-client
-    cp -r ../package/luci-app-horus-client/* package/luci-app-horus-client/
-fi
  
 # Guarantee pre-compressed wireless.js.gz exists in overlay
 if [ -f files/www/luci-static/resources/view/network/wireless.js ]; then
@@ -99,22 +93,15 @@ CONFIG_PACKAGE_iwinfo=y
 CONFIG_PACKAGE_rpcd=y
 CONFIG_PACKAGE_rpcd-mod-luci=y
  
-# Horus AP Client & Helper Runtime Dependencies (mipsel_24kc)
-CONFIG_PACKAGE_luci-app-horus-client=y
-CONFIG_PACKAGE_python3=y
-CONFIG_PACKAGE_python3-light=y
-CONFIG_PACKAGE_python3-base=y
-CONFIG_PACKAGE_libpython3=y
-CONFIG_PACKAGE_python3-urllib=y
-CONFIG_PACKAGE_python3-logging=y
-CONFIG_PACKAGE_python3-json=y
-CONFIG_PACKAGE_python3-openssl=y
-CONFIG_PACKAGE_python3-cgi=y
-CONFIG_PACKAGE_openssl-util=y
-CONFIG_PACKAGE_libopenssl=y
-CONFIG_PACKAGE_libopenssl-conf=y
+# Horus AP Client Helper Packages (mipsel_24kc)
 CONFIG_PACKAGE_zlib=y
 CONFIG_PACKAGE_libbz2=y
+CONFIG_PACKAGE_libopenssl-conf=y
+CONFIG_PACKAGE_libopenssl3=y
+CONFIG_PACKAGE_openssl-util=y
+CONFIG_PACKAGE_libpython3=y
+CONFIG_PACKAGE_python3-base=y
+CONFIG_PACKAGE_python3-light=y
  
 # System Tools & Utilities
 # irqbalance spreads the mt76 (PCIe WiFi) and GMAC (ethernet) IRQs across
@@ -302,9 +289,7 @@ CONFIG_PACKAGE_sqm-scripts \
 CONFIG_PACKAGE_luci-app-sqm \
 CONFIG_PACKAGE_kmod-sched-cake \
 CONFIG_PACKAGE_kmod-ifb \
-CONFIG_PACKAGE_luci-app-horus-client \
 CONFIG_PACKAGE_python3-light \
-CONFIG_PACKAGE_python3-urllib \
 CONFIG_PACKAGE_openssl-util"
  
 MISSING=""

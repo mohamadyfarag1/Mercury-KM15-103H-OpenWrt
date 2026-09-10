@@ -315,7 +315,7 @@ if [ "${PIPESTATUS[0]}" -ne 0 ]; then
         done
     else
         echo "(no 'ERROR: <pkg> failed to build' line; tail of build.log:)"
-        tail -n 60 build.log
+        tail -n 120 build.log
     fi
     exit 1
 fi
