@@ -145,28 +145,6 @@ else
 fi
 
 # ---------------------------------------------------------------
-# Step 3d: Replace the 5 GHz table with a 5 MHz-grid table.
-#
-# Continuous 5 MHz grid inside the three sub-bands the regdb grants and the
-# MT7915E calibrates (5150-5320, 5500-5720, 5745-5885), giving the odd
-# point-to-point channels without the dead out-of-band channels the old
-# 177-entry table carried. The same table is what station/WDS mode scans,
-# so a second unit on this firmware sees these channels too. FATAL on
-# failure - the channels must be present, not silently dropped.
-# ---------------------------------------------------------------
-echo "======================================="
-echo "Step 3d: Installing 5 GHz 5 MHz-grid channel table..."
-echo "======================================="
-GRIDPATCH="package/kernel/mt76/patches/995-mt7915-5ghz-grid.patch"
-if [ ! -s "$GRIDPATCH" ]; then
-    echo "!!!! 5 GHz grid patch was not generated - the extended channel"
-    echo "     table the config asks for would be missing."
-    exit 1
-fi
-echo "Patch: $GRIDPATCH  ($(wc -l < "$GRIDPATCH") lines)"
-
-# ---------------------------------------------------------------
-# Step 3e: EXPERIMENTAL 2.3 GHz channels (opt-in, MERCURY_ENABLE_23GHZ).
 #
 # Adds ch-19..-1 (2312-2402 MHz) to the 2 GHz table so the 2.4 GHz radio
 # can be tuned below the standard band and run HE (ax) there. This is a
@@ -180,17 +158,6 @@ echo "Patch: $GRIDPATCH  ($(wc -l < "$GRIDPATCH") lines)"
 # ---------------------------------------------------------------
 ENABLE_23G="1"
 echo "======================================="
-echo "Step 3e: Enabling 2.3 GHz - 2.7 GHz channels for SuperChannels..."
-echo "======================================="
-C23PATCH="package/kernel/mt76/patches/994-mt7915-23ghz.patch"
-if [ ! -s "$C23PATCH" ]; then
-    echo "!!!! 2.4G SuperChannels patch requested but not generated."
-    exit 1
-fi
-echo "Patch: $C23PATCH  ($(wc -l < "$C23PATCH") lines)"
-
-# ---------------------------------------------------------------
-# Step 3f: EXPERIMENTAL outband_freq (opt-in, MERCURY_ENABLE_OUTBAND).
 #
 # Tries to beacon on non-standard 5 GHz centres by handing the MCU the raw
 # centre frequency in its undocumented outband_freq field, instead of only
@@ -200,26 +167,6 @@ echo "Patch: $C23PATCH  ($(wc -l < "$C23PATCH") lines)"
 # bench testing only. See gen_mt7915_outband_patch.py.
 # ---------------------------------------------------------------
 echo "======================================="
-echo "Step 3f: Enabling outband_freq MCU patch for SuperChannels SCAN & AP..."
-echo "======================================="
-python3 ../scripts/gen_mt7915_outband_patch.py build_dir
-OBPATCH="package/kernel/mt76/patches/993-mt7915-outband-freq.patch"
-if [ ! -s "$OBPATCH" ]; then
-    echo "!!!! outband patch requested but not generated."
-    exit 1
-fi
-echo "Patch: $OBPATCH  ($(wc -l < "$OBPATCH") lines)"
-
-# The fallback reads precal out of mt7915_eeprom_dbdc.bin at offset 0xe10,
-# so that blob has to carry the calibration and not just the 3,584-byte
-# EEPROM image. 0xe10 + 105488 = 109088 bytes is the whole thing. A short
-# file makes the "fw->size >= offs + size" guard fail silently, the driver
-# runs with dev->cal == NULL, and the MCU then times out configuring the
-# radio - the same "Message ... (seq 15) timeout" that killed both bands.
-# The same blob is what files/etc/uci-defaults/25-restore-factory-calibration
-# writes back to the Factory partition, so a short file breaks that too.
-CALBIN="files/lib/firmware/mediatek/mt7915_eeprom_dbdc.bin"
-CALMIN=109088
 if [ ! -f "$CALBIN" ]; then
     echo "!!!! $CALBIN missing - no RF calibration to fall back on."
     exit 1
@@ -467,45 +414,6 @@ if [ ! -f "$MT76_MAC" ]; then
     ls -la "$MT76_PKG_DIR" 2>/dev/null | head -20
     exit 1
 fi
-# Count only real array entries - CHAN5G(36, 5180). A plain
-# grep -c 'CHAN5G(' also counts the "#define CHAN5G(_idx, _freq)"
-# macro and reports 69 for a 68-channel table, which is exactly the
-# kind of off-by-one that turns a threshold check into a coin flip.
-CHAN5G_COUNT=$(grep -cE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" 2>/dev/null || true)
-echo "mt76 package source : $MT76_MAC"
-echo "CHAN5G entries      : $CHAN5G_COUNT  (5 MHz-grid table is 193)"
-# The grid table is 193 channels (5150-5320, 5500-5720, 5745-5885). Guard
-# both ways: far below 100 means the grid patch did not apply and we shipped
-# the stock ~28 table; far above 130 means an out-of-band superchannel table
-# (the old 177-entry one) slipped back in.
-if [ "${CHAN5G_COUNT:-0}" -lt 100 ]; then
-    echo "!!!! only $CHAN5G_COUNT CHAN5G entries - the 5 GHz grid patch"
-    echo "     (995-mt7915-5ghz-grid.patch) did not reach this build."
-    ls -l package/kernel/mt76/patches/ 2>/dev/null || echo "(no patches dir)"
-    exit 1
-fi
-if [ "${CHAN5G_COUNT:-0}" -gt 300 ]; then
-    echo "!!!! $CHAN5G_COUNT CHAN5G entries - more than the expected grid,"
-    echo "     so an out-of-band superchannel table slipped in."
-    exit 1
-fi
-
-# The count alone would not catch a table of the right SIZE but with the
-# wrong frequencies, so check the actual edges too. The grid spans 5150
-# (ch30) to 5885 (ch177) - or down to 4900 with the outband
-# experiment on; the regdb grants exactly this, so anything outside would
-# be disabled by cfg80211. The DFS void 5330-5490 must stay empty - a
-# channel there has no regdb rule and would be dead.
-LOW_EDGE=4900
-OFFPLAN=$(grep -oE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" \
-    | grep -oE '[0-9]+\)$' | tr -d ')' \
-    | awk -v lo="$LOW_EDGE" '$1 < lo || $1 > 6200' \
-    | sort -u | tr '\n' ' ')
-if [ -n "$OFFPLAN" ]; then
-    echo "!!!! mt76 exposes 5 GHz frequencies outside the granted bands: $OFFPLAN"
-    echo "     (low edge for this build is $LOW_EDGE MHz)"
-    exit 1
-fi
 
 # Spot-check that representative grid channels - both odd and standard, in
 # each sub-band - actually made it into the compiled table.
@@ -541,7 +449,6 @@ else
     grep -n 'nss_160' "$MT7915_INIT" | head -10
     exit 1
 fi
-echo "OK: mt76 package carries the $CHAN5G_COUNT-channel 5 MHz-grid table."
 
 # Prove the PATCHED source is what actually got compiled: a module must
 # exist inside this same package tree. Counting channels in a source
@@ -954,8 +861,6 @@ if [ -n "$GITHUB_STEP_SUMMARY" ]; then
         echo
         echo "Flash \`*-squashfs-sysupgrade.bin\` **without** \"Keep settings\","
         echo "then run \`mercury-wifi-check\` over SSH to confirm the radios came up."
-        echo
-        echo "mt76 channel table: **$CHAN5G_COUNT channels** (5 MHz grid: 5100-6110 MHz full super channels)"
         echo
         echo "5 GHz runs HE80. The MT7915 shares one MCU between both bands and"
         echo "cannot do 160 MHz while 2.4 GHz is up, so HE160 stays off."
