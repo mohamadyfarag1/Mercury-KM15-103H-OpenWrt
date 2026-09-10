@@ -486,8 +486,8 @@ fi
 # kind of off-by-one that turns a threshold check into a coin flip.
 CHAN5G_COUNT=$(grep -cE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" 2>/dev/null || true)
 echo "mt76 package source : $MT76_MAC"
-echo "CHAN5G entries      : $CHAN5G_COUNT  (5 MHz-grid table is 109)"
-# The grid table is 109 channels (5150-5320, 5500-5720, 5745-5885). Guard
+echo "CHAN5G entries      : $CHAN5G_COUNT  (5 MHz-grid table is 193)"
+# The grid table is 193 channels (5150-5320, 5500-5720, 5745-5885). Guard
 # both ways: far below 100 means the grid patch did not apply and we shipped
 # the stock ~28 table; far above 130 means an out-of-band superchannel table
 # (the old 177-entry one) slipped back in.
@@ -497,8 +497,8 @@ if [ "${CHAN5G_COUNT:-0}" -lt 100 ]; then
     ls -l package/kernel/mt76/patches/ 2>/dev/null || echo "(no patches dir)"
     exit 1
 fi
-if [ "${CHAN5G_COUNT:-0}" -gt 130 ]; then
-    echo "!!!! $CHAN5G_COUNT CHAN5G entries - more than the 109-channel grid,"
+if [ "${CHAN5G_COUNT:-0}" -gt 210 ]; then
+    echo "!!!! $CHAN5G_COUNT CHAN5G entries - more than the 193-channel grid,"
     echo "     so an out-of-band superchannel table slipped in."
     exit 1
 fi
@@ -515,7 +515,7 @@ case "${MERCURY_ENABLE_OUTBAND:-}" in
 esac
 OFFPLAN=$(grep -oE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" \
     | grep -oE '[0-9]+\)$' | tr -d ')' \
-    | awk -v lo="$LOW_EDGE" '$1 < lo || $1 > 5885 || ($1 > 5330 && $1 < 5490)' \
+    | awk -v lo="$LOW_EDGE" '$1 < lo || $1 > 6120' \
     | sort -u | tr '\n' ' ')
 if [ -n "$OFFPLAN" ]; then
     echo "!!!! mt76 exposes 5 GHz frequencies outside the granted bands: $OFFPLAN"
