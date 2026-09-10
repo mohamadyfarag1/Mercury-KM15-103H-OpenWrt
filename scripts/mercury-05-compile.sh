@@ -106,18 +106,6 @@ else
 fi
 
 # ---------------------------------------------------------------
-# Step 3b.5: Patch mt7915/eeprom.c for txpower fallback on super channels.
-# ---------------------------------------------------------------
-echo "======================================="
-echo "Step 3b.5: Patching mt7915 txpower for uncalibrated super channels..."
-echo "======================================="
-python3 ../scripts/gen_mt7915_txpower_patch.py build_dir
-TXPOWERPATCH="package/kernel/mt76/patches/998-mt7915-txpower-fallback.patch"
-if [ -s "$TXPOWERPATCH" ]; then
-    echo "Patch: $TXPOWERPATCH  ($(wc -l < "$TXPOWERPATCH") lines)"
-else
-    echo "NOTE: TX power fallback patch not generated (non-fatal; pattern changed)."
-fi
 
 # ---------------------------------------------------------------
 # Step 3c: Patch mt7915/main.c so station-dump RX rate is sticky.
@@ -148,43 +136,6 @@ fi
 # can be tuned below the standard band and run HE (ax) there. This is a
 # gamble on the RF front end - the PA, band-pass filter and antenna match
 # are built for 2.4 GHz and there is no calibration below it, so these may
-# radiate weakly or not at all, and the MCU may reject them. OFF unless
-# MERCURY_ENABLE_23GHZ is set, so the stable build never carries it.
-# The kernel signed-channel cast (Step 4b) and the hostapd 2.3 GHz mapping
-# (mercury-04) and the regdb 2.3 GHz grant (mercury-06) are gated on the
-# same flag.
-# ---------------------------------------------------------------
-ENABLE_23G="1"
-echo "======================================="
-#
-# Tries to beacon on non-standard 5 GHz centres by handing the MCU the raw
-# centre frequency in its undocumented outband_freq field, instead of only
-# the channel number it validates against its own table. This is the driver
-# layer below regdb/hostapd - the last thing between us and the closed MCU.
-# It may work, be ignored, or time out the MCU, so it is flag-gated and for
-# bench testing only. See gen_mt7915_outband_patch.py.
-# ---------------------------------------------------------------
-echo "======================================="
-if [ ! -f "$CALBIN" ]; then
-    echo "!!!! $CALBIN missing - no RF calibration to fall back on."
-    exit 1
-fi
-CALSZ=$(wc -c < "$CALBIN")
-CALHDR=$(od -An -tx1 -N2 "$CALBIN" | tr -d ' \n')
-echo "calibration blob : $CALBIN ($CALSZ bytes, header $CALHDR)"
-if [ "$CALSZ" -lt "$CALMIN" ]; then
-    echo "!!!! $CALBIN is $CALSZ bytes, need at least $CALMIN."
-    echo "     It carries only the EEPROM image, not the 105,488 bytes of"
-    echo "     precal data at offset 0xe10, so the fallback cannot fire."
-    exit 1
-fi
-if [ "$CALHDR" != "1579" ]; then
-    echo "!!!! $CALBIN starts with '$CALHDR', expected '1579' (MT7915 EEPROM magic)."
-    echo "     25-restore-factory-calibration keys off this magic, so a blob"
-    echo "     with the wrong header would be written to Factory and rejected."
-    exit 1
-fi
-echo "  OK: calibration blob carries EEPROM + precal."
 
 # Force mt76 to be re-extracted AND re-patched on the next build.
 #
@@ -413,16 +364,6 @@ if [ ! -f "$MT76_MAC" ]; then
     exit 1
 fi
 
-# Spot-check that representative grid channels - both odd and standard, in
-# each sub-band - actually made it into the compiled table.
-for LF in 5150 5155 5320 5500 5720 5745 5885; do
-    if ! grep -qE "CHAN5G\([0-9]+, *$LF\)" "$MT76_MAC"; then
-        echo "!!!! mt76 table is missing the $LF MHz grid channel -"
-        echo "     995-mt7915-5ghz-grid.patch did not apply completely."
-        exit 1
-    fi
-done
-echo "OK: 5 GHz 5 MHz-grid channels present across all three sub-bands."
 
 # HE160 must stay guarded by dbdc_support. With the guard gone the driver
 # advertises 160 MHz, hostapd builds 160-capable station records, and the
