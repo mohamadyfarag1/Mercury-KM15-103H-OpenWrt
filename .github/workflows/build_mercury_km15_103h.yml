@@ -6,6 +6,7 @@ on:
     paths:
       - 'mercury_km15_103h_build/**'
       - 'scripts/**'
+      - 'package/**'
       - '.github/workflows/build_mercury_km15_103h.yml'
   workflow_dispatch:
     inputs:

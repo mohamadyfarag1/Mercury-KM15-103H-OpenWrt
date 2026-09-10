@@ -1,0 +1,479 @@
+#!/bin/sh
+. /usr/lib/horus/cgi_auth.sh || exit 1
+horus_require_auth read
+# =====================================================
+# RADIUS Connection Test - CGI Script
+# Supports: SAS 4, DMA Radius, ADV Radius
+# =====================================================
+printf "Content-Type: application/json\r\n\r\n"
+
+# ── Read UCI Config ──────────────────────────────────
+decrypt_uci() {
+    local val="$1"
+    if [ "${val#enc3_}" != "$val" ]; then
+        local raw="${val#enc3_}"
+        if command -v ucode >/dev/null 2>&1; then
+            ucode -e 'let r=b64dec(ARGV[0]); if(!r) return; let k="horus_radius_2026", o=[]; for(let i=0; i<length(r); i++) push(o, chr(ord(r,i)^ord(k, i%length(k)))); print(join("", o));' "$raw" 2>/dev/null || printf "%s" "$val"
+        elif command -v lua >/dev/null 2>&1; then
+            echo -n "$raw" | lua -e 'local n=require("nixio"); local b=n.bin.b64decode(io.read("*all")); if not b then return end; local k="horus_radius_2026"; local o={}; for i=1,#b do o[i]=string.char(n.bit.bxor(b:byte(i), k:byte((i-1)%#k + 1))) end; io.write(table.concat(o))' 2>/dev/null || printf "%s" "$val"
+        elif command -v python3 >/dev/null 2>&1; then
+            PYTHONPATH=/usr/lib python3 -c "from horus.radius.common import decrypt_uci; import sys; print(decrypt_uci(sys.argv[1]), end='')" "$val" 2>/dev/null || printf "%s" "$val"
+        else
+            printf "%s" "$val"
+        fi
+    else
+        printf "%s" "$val"
+    fi
+}
+
+RTYPE=$(uci -q get horus_controller.main.radius_type)
+[ -z "$RTYPE" ] && RTYPE="sas"
+
+BASE_URL=$(uci -q get horus_controller.main.${RTYPE}_base_url)
+[ -z "$BASE_URL" ] && BASE_URL=$(uci -q get horus_controller.main.base_url)
+
+USERNAME=$(uci -q get horus_controller.main.${RTYPE}_username)
+[ -z "$USERNAME" ] && USERNAME=$(uci -q get horus_controller.main.username)
+
+PASSWORD=$(decrypt_uci "$(uci -q get horus_controller.main.${RTYPE}_password)")
+[ -z "$PASSWORD" ] && PASSWORD=$(decrypt_uci "$(uci -q get horus_controller.main.password)")
+
+API_KEY=$(decrypt_uci "$(uci -q get horus_controller.main.${RTYPE}_api_key)")
+[ -z "$API_KEY" ] && API_KEY=$(decrypt_uci "$(uci -q get horus_controller.main.api_key)")
+
+API_PORT=$(uci -q get horus_controller.main.${RTYPE}_api_port)
+[ -z "$API_PORT" ] && API_PORT=$(uci -q get horus_controller.main.api_port)
+
+BASE_URL=$(echo "$BASE_URL" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//;s:/*$::')
+
+if [ -z "$BASE_URL" ]; then
+    printf '{"success":false,"message":"عنوان السيرفر فارغ!"}\n'
+    exit 0
+fi
+
+case "$BASE_URL" in
+    http://*|https://*) ;;
+    *) BASE_URL="http://$BASE_URL" ;;
+esac
+
+# ── If daemon is already actively syncing and online, return success immediately ──
+if [ -f /tmp/horus_radius.json ]; then
+    _rad_json=$(cat /tmp/horus_radius.json 2>/dev/null)
+    _cur_status=$(printf '%s' "$_rad_json" | grep -o '"status"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    _cur_type=$(printf '%s' "$_rad_json" | grep -o '"radius_type"[[:space:]]*:[[:space:]]*"[^"]*"' | cut -d'"' -f4)
+    _cur_ts=$(printf '%s' "$_rad_json" | grep -o '"timestamp"[[:space:]]*:[[:space:]]*[0-9]*' | tr -dc '0-9')
+    _now=$(date +%s)
+    if [ "$_cur_status" = "online" ] && [ "$_cur_type" = "$RTYPE" ] && [ -n "$_cur_ts" ] && [ $((_now - _cur_ts)) -lt 60 ]; then
+        printf '{"success":true,"message":"✅ %s متصل بنجاح!","details":"المزامنة نشطة بالخلفية وتعمل باستمرار"}\n' "$RTYPE"
+        exit 0
+    fi
+fi
+
+# ── Helpers ──────────────────────────────────────────
+json_esc() { printf '%s' "$1" | sed 's/\\/\\\\/g;s/"/\\"/g' | tr '\r\n' '  '; }
+
+url_enc() {
+    printf '%s' "$1" | sed \
+        -e 's/%/%25/g' -e 's/ /%20/g' -e 's/#/%23/g' \
+        -e 's/&/%26/g' -e 's/+/%2B/g' -e 's/=/%3D/g' -e 's/?/%3F/g'
+}
+
+get_host() { echo "$1" | sed 's|^http[s]*://||;s|/.*||;s|:.*||'; }
+get_port() {
+    _x=$(echo "$1" | sed 's|^http[s]*://||;s|/.*||')
+    case "$_x" in *:*) echo "$_x" | sed 's|.*:||' ;; *) echo 80 ;; esac
+}
+get_path() {
+    _x=$(echo "$1" | sed 's|^http[s]*://[^/]*||')
+    [ -z "$_x" ] && _x="/"
+    echo "$_x"
+}
+
+# ── HTTP Tool Detection ───────────────────────────────
+# Returns: "curl", "uclient", "wget_hdr", "wget", "nc"
+HTTP_TOOL=""
+detect_http_tool() {
+    [ -n "$HTTP_TOOL" ] && return
+    # 1. curl (preferred: full standard compliant HTTP client)
+    if command -v curl >/dev/null 2>&1; then
+        HTTP_TOOL="curl"; return
+    fi
+    # 2. uclient-fetch (check if it supports --header)
+    if command -v uclient-fetch >/dev/null 2>&1; then
+        _t=$(uclient-fetch --header="X-T:1" -q -T 1 -O /dev/null "http://127.0.0.1:65534" 2>&1 || true)
+        case "$_t" in
+            *unrecognized*|*invalid*|*'--header'*) ;;
+            *) HTTP_TOOL="uclient"; return ;;
+        esac
+    fi
+    # 2. curl
+    if command -v curl >/dev/null 2>&1; then
+        HTTP_TOOL="curl"; return
+    fi
+    # 3. wget with --header support
+    if command -v wget >/dev/null 2>&1; then
+        _t=$(wget --header="X-T:1" -q -T 1 -O /dev/null "http://127.0.0.1:65534" 2>&1 || true)
+        case "$_t" in
+            *unrecognized*|*invalid*|*'--header'*) ;;
+            *) HTTP_TOOL="wget_hdr"; return ;;
+        esac
+    fi
+    # 4. nc (netcat)
+    if command -v nc >/dev/null 2>&1; then
+        HTTP_TOOL="nc"; return
+    fi
+    # 5. plain wget fallback
+    HTTP_TOOL="wget"
+}
+
+# ── Raw nc POST (fallback) ───────────────────────────
+nc_post() {
+    _url="$1" _body="$2" _auth="$3"
+    _h=$(get_host "$_url") _pt=$(get_port "$_url") _pa=$(get_path "$_url")
+    _cl=$(printf '%s' "$_body" | wc -c | tr -d ' ')
+    {
+        printf "POST %s HTTP/1.0\r\n" "$_pa"
+        printf "Host: %s\r\n" "$_h"
+        printf "Content-Type: application/json\r\n"
+        printf "Accept: application/json\r\n"
+        [ -n "$_auth" ] && printf "Authorization: Bearer %s\r\n" "$_auth"
+        printf "Content-Length: %s\r\n" "$_cl"
+        printf "Connection: close\r\n\r\n"
+        printf "%s" "$_body"
+    } | nc "$_h" "$_pt" 2>/dev/null | {
+        # Strip HTTP headers: skip until blank line
+        _in_hdr=1
+        while IFS= read -r line || [ -n "$line" ]; do
+            _stripped=$(printf '%s' "$line" | tr -d '\r')
+            if [ "$_in_hdr" = "1" ]; then
+                [ -z "$_stripped" ] && _in_hdr=0
+            else
+                printf '%s\n' "$_stripped"
+            fi
+        done
+    }
+}
+
+# ── Unified HTTP POST ────────────────────────────────
+http_post() {
+    _url="$1" _body="$2" _auth="$3"
+    detect_http_tool
+    case "$HTTP_TOOL" in
+        uclient)
+            if [ -n "$_auth" ]; then
+                uclient-fetch -q -T 12 \
+                    -O - \
+                    --header="Content-Type: application/json" \
+                    --header="Authorization: Bearer $_auth" \
+                    --post-data="$_body" \
+                    "$_url" 2>/dev/null
+            else
+                uclient-fetch -q -T 12 \
+                    -O - \
+                    --header="Content-Type: application/json" \
+                    --post-data="$_body" \
+                    "$_url" 2>/dev/null
+            fi
+            ;;
+        curl)
+            if [ -n "$_auth" ]; then
+                curl -s -m 12 -X POST -H "Content-Type: application/json" \
+                    -H "Authorization: Bearer $_auth" -d "$_body" "$_url" 2>/dev/null
+            else
+                curl -s -m 12 -X POST -H "Content-Type: application/json" \
+                    -d "$_body" "$_url" 2>/dev/null
+            fi
+            ;;
+        wget_hdr)
+            if [ -n "$_auth" ]; then
+                wget -q -T 12 -O - \
+                    --header="Content-Type: application/json" \
+                    --header="Authorization: Bearer $_auth" \
+                    --post-data="$_body" "$_url" 2>/dev/null
+            else
+                wget -q -T 12 -O - \
+                    --header="Content-Type: application/json" \
+                    --post-data="$_body" "$_url" 2>/dev/null
+            fi
+            ;;
+        nc)
+            nc_post "$_url" "$_body" "$_auth"
+            ;;
+        *)
+            # Plain wget without headers (last resort)
+            wget -q -T 12 -O - --post-data="$_body" "$_url" 2>/dev/null
+            ;;
+    esac
+}
+
+http_get() { wget -q -T 12 -O - "$1" 2>/dev/null; }
+
+# ── JSON ─────────────────────────────────────────────
+jval() {
+    if command -v jsonfilter >/dev/null 2>&1; then
+        printf '%s' "$1" | jsonfilter -e "@.$2" 2>/dev/null
+    fi
+}
+
+is_ok() {
+    _r="$1"
+    [ -z "$_r" ] && return 1
+    # Check via jsonfilter
+    _s=$(jval "$_r" "status")
+    { [ "$_s" = "200" ] || [ "$_s" = "success" ]; } && return 0
+    # Check for token presence
+    _t=$(jval "$_r" "token")
+    [ -n "$_t" ] && return 0
+    # Grep fallbacks (whitespace-tolerant)
+    echo "$_r" | grep -qE '"status"[[:space:]]*:[[:space:]]*(200|"success")' && return 0
+    echo "$_r" | grep -q '"token"' && return 0
+    return 1
+}
+
+# ══════════════════════════════════════════════════════
+# SAS 4 Test
+# ══════════════════════════════════════════════════════
+test_sas() {
+    LOGIN_URL="$BASE_URL"
+    case "$LOGIN_URL" in
+        */api/login|*/api/login/) ;;
+        */admin/api/index.php/api) LOGIN_URL="${LOGIN_URL}/login" ;;
+        */admin/api/index.php/api/) LOGIN_URL="${LOGIN_URL%/}/login" ;;
+        */admin|*/admin/) LOGIN_URL="${LOGIN_URL%/}/api/index.php/api/login" ;;
+        *) LOGIN_URL="${LOGIN_URL}/admin/api/index.php/api/login" ;;
+    esac
+
+    KEY="abcdefghijuklmno0123456789012345"
+    PLAIN="{\"username\":\"$USERNAME\",\"password\":\"$PASSWORD\"}"
+    RAW=""
+
+    detect_http_tool
+    MSG_TOOL="(tool: $HTTP_TOOL)"
+
+    # Try AES-encrypted payload first
+    if command -v openssl >/dev/null 2>&1; then
+        ENC=$(printf "%s" "$PLAIN" | openssl enc -aes-256-cbc -md md5 -a -A -k "$KEY" 2>/dev/null)
+        if [ -n "$ENC" ]; then
+            RAW=$(http_post "$LOGIN_URL" "{\"payload\":\"$ENC\"}")
+        fi
+    fi
+
+    # Try plain JSON
+    if ! echo "$RAW" | grep -q '{'; then
+        RAW=$(http_post "$LOGIN_URL" "$PLAIN")
+    fi
+
+    HOST=$(get_host "$BASE_URL")
+    if ! echo "$RAW" | grep -q '{'; then
+        printf '{"success":false,"message":"لا يوجد رد (Timeout) %s","details":"URL: %s\\nجرب: ping %s"}\n' \
+            "$MSG_TOOL" "$LOGIN_URL" "$HOST"
+    elif is_ok "$RAW"; then
+        printf '{"success":true,"message":"✅ SAS متصل! %s","details":"%s"}\n' \
+            "$MSG_TOOL" "$LOGIN_URL"
+    elif echo "$RAW" | grep -q "too_many_tries"; then
+        if [ -s /tmp/sas_token.txt ] && [ -f /tmp/horus_radius.json ]; then
+            printf '{"success":true,"message":"✅ SAS متصل بالفعل (جلسة نشطة) %s","details":"المزامنة تعمل بالخلفية"}\n' "$MSG_TOOL"
+        else
+            printf '{"success":false,"message":"⚠️ تم تجاوز محاولات الدخول (انتظر دقيقة) %s","details":"%s"}\n' \
+                "$MSG_TOOL" "$RAW"
+        fi
+    else
+        E=$(json_esc "$RAW")
+        printf '{"success":false,"message":"السيرفر رد لكن رفض البيانات %s","details":"%s"}\n' \
+            "$MSG_TOOL" "$E"
+    fi
+}
+
+# ══════════════════════════════════════════════════════
+# DMA Radius Test
+# ══════════════════════════════════════════════════════
+test_dma() {
+    DMA_KEY="${API_KEY:-Mohamady_Radius_2026}"
+    DMA_URL="$BASE_URL"
+    case "$DMA_URL" in
+        *.php) ;;
+        *) DMA_URL="${DMA_URL%/}/user_api.php" ;;
+    esac
+
+    E_KEY=$(url_enc "$DMA_KEY")
+    E_USER=$(url_enc "$USERNAME")
+    E_PASS=$(url_enc "$PASSWORD")
+
+    FULL="${DMA_URL}?key=${E_KEY}&admin_user=${E_USER}&admin_pass=${E_PASS}&action=online"
+    RAW=$(http_get "$FULL")
+
+    HOST=$(get_host "$BASE_URL")
+    if ! echo "$RAW" | grep -q '{'; then
+        printf '{"success":false,"message":"لا يوجد رد (Timeout)","details":"URL: %s\\nجرب: ping %s"}\n' \
+            "$DMA_URL" "$HOST"
+    elif is_ok "$RAW"; then
+        printf '{"success":true,"message":"✅ DMA متصل!","details":"DMA OK"}\n'
+    else
+        E=$(json_esc "$RAW")
+        printf '{"success":false,"message":"رد لكن رُفضت البيانات - تأكد من اسم المستخدم وكلمة السر","details":"%s"}\n' "$E"
+    fi
+}
+
+# ══════════════════════════════════════════════════════
+# ADV Radius Test
+# ══════════════════════════════════════════════════════
+test_adv() {
+    OUT=$(python3 -c "
+import sys, json
+sys.path.insert(0, '/usr/lib')
+try:
+    from horus.radius.adv import AdvEngine
+    eng = AdvEngine('$BASE_URL', '$USERNAME', '$PASSWORD', '$API_KEY')
+    tok = eng.login()
+    if tok:
+        cnt_str = ''
+        try:
+            cnt = eng.get_online_count()
+            cnt_str = ' | المتصلون الآن بالسيرفر: ' + str(cnt)
+        except Exception:
+            pass
+        print(json.dumps({'success': True, 'message': '✅ ADV متصل بنجاح!', 'details': 'Auth OK' + cnt_str}))
+    else:
+        print(json.dumps({'success': False, 'message': 'رفض سيرفر ADV تسجيل الدخول (تحقق من License Key أو تفعيل الـ API في لوحة السيرفر)', 'details': 'Login failed'}))
+except Exception as e:
+    print(json.dumps({'success': False, 'message': 'تعذر الاتصال بسيرفر ADV', 'details': str(e)}))
+" 2>/dev/null)
+    if [ -n "$OUT" ]; then
+        echo "$OUT"
+    else
+        printf '{"success":false,"message":"فشل اختبار اتصال ADV","details":"تأكد من عنوان السيرفر ومفتاح Master Key"}\n'
+    fi
+}
+
+test_icm() {
+    BASE=$(echo "$BASE_URL" | sed 's:/*$::')
+    case "$BASE" in
+        http://*|https://*) ;;
+        *) BASE="https://$BASE" ;;
+    esac
+    case "$BASE" in
+        */api/users/list|*/api/users/list/) BASE="${BASE%/}/index.php" ;;
+        *.php) ;;
+        *) BASE="${BASE}/api/users/list/index.php" ;;
+    esac
+
+    [ -z "$API_KEY" ] && API_KEY="7f3a9c5e2d8b4f6a1e7c3b9d5f2a8e4c"
+
+    OUT=$(python3 -c "
+import sys, json
+sys.path.insert(0, '/usr/lib')
+from horus.radius.http import http_req, custom_urlencode
+
+url = '$BASE'
+params = custom_urlencode({
+    'username': '''$USERNAME''',
+    'password': '''$PASSWORD''',
+    'key': '''$API_KEY''',
+    'limit': '1',
+})
+res = http_req(f'{url}?{params}', timeout=8)
+if not res or not isinstance(res, dict):
+    print(json.dumps({'success': False, 'message': 'تعذر الاتصال بسيرفر ICM', 'details': 'Timeout or Network Error'}))
+elif res.get('status') == 'success':
+    tot = res.get('data', {}).get('pagination', {}).get('total_items', 0)
+    print(json.dumps({'success': True, 'message': '✅ ICM متصل بنجاح!', 'details': f'المشتركين: {tot}'}))
+else:
+    msg = res.get('message') or 'بيانات الدخول غير صحيحة'
+    print(json.dumps({'success': False, 'message': f'فشل الاتصال بـ ICM: {msg}', 'details': str(res)}))
+" 2>/dev/null)
+
+    if [ -n "$OUT" ]; then
+        echo "$OUT"
+    else
+        printf '{"success":false,"message":"فشل اختبار اتصال ICM","details":"تأكد من الرابط والمفتاح وبيانات الدخول"}\n'
+    fi
+}
+
+test_um7() {
+    OUT=$(python3 -c "
+import base64, urllib.request, json, ssl, sys
+u = '$BASE_URL'.rstrip('/')
+if not u.startswith('http'): u = 'https://' + u
+auth = base64.b64encode(b'$USERNAME:$PASSWORD').decode('ascii')
+req = urllib.request.Request(u + '/rest/user-manager/session', headers={'Authorization': 'Basic ' + auth})
+ctx = ssl._create_unverified_context() if hasattr(ssl, '_create_unverified_context') else None
+try:
+    with urllib.request.urlopen(req, timeout=8, context=ctx) as r:
+        print(json.dumps({'success': True, 'message': '✅ UM7 متصل!', 'details': 'User Manager 7 OK'}))
+except Exception as e:
+    print(json.dumps({'success': False, 'message': 'فشل الاتصال بـ UM7', 'details': str(e)}))
+" 2>/dev/null)
+    if [ -n "$OUT" ]; then
+        echo "$OUT"
+    else
+        printf '{"success":false,"message":"فشل اختبار اتصال UM7","details":"تأكد من عنوان IP و REST API"}\n'
+    fi
+}
+
+test_freenet() {
+    OUT=$(python3 -c "
+import sys, json
+sys.path.insert(0, '/usr/lib')
+try:
+    from horus.radius.freenet import FreeNetEngine
+    eng = FreeNetEngine('''$BASE_URL''', '''$USERNAME''', '''$PASSWORD''')
+    token = eng.get_token(force_refresh=True)
+    if token:
+        print(json.dumps({'success': True, 'message': '✅ Free Net متصل بنجاح!', 'details': 'Free Net Radius OK'}))
+    else:
+        print(json.dumps({'success': False, 'message': 'فشل تسجيل الدخول', 'details': 'تأكد من اسم المستخدم وكلمة المرور'}))
+except Exception as e:
+    print(json.dumps({'success': False, 'message': 'تعذر الاتصال بسيرفر Free Net', 'details': str(e)}))
+" 2>/dev/null)
+    if [ -n "$OUT" ]; then
+        echo "$OUT"
+    else
+        printf '{"success":false,"message":"فشل اختبار اتصال Free Net","details":"تأكد من عنوان السيرفر وصحة بيانات الدخول"}\n'
+    fi
+}
+
+test_mikrotik() {
+    OUT=$(python3 -c "
+import json, sys
+sys.path.insert(0, '/usr/lib')
+try:
+    from horus.radius.mikrotik import MikrotikApiClient
+    host = '$BASE_URL'.replace('http://','').replace('https://','').split(':')[0].strip('/')
+    port = 8728
+    if '$API_PORT'.strip():
+        try: port = int('$API_PORT'.strip())
+        except: pass
+    elif ':' in '$BASE_URL':
+        try: port = int('$BASE_URL'.split(':')[-1].strip('/'))
+        except: pass
+    c = MikrotikApiClient(host, port, timeout=6)
+    c.connect()
+    c.login('$USERNAME', '$PASSWORD')
+    act = c.query('/ip/hotspot/active/print', proplist=['.id'], tag='t')
+    c.close()
+    print(json.dumps({'success': True, 'message': '✅ MikroTik متصل بنجاح!', 'details': 'جلسات Hotspot النشطة: ' + str(len(act))}))
+except Exception as e:
+    err_msg = str(e)
+    if 'login failed' in err_msg.lower() or 'password' in err_msg.lower():
+        print(json.dumps({'success': False, 'message': 'بيانات دخول MikroTik غير صحيحة', 'details': err_msg}))
+    else:
+        print(json.dumps({'success': False, 'message': 'تعذر الاتصال بـ MikroTik', 'details': err_msg}))
+" 2>/dev/null)
+    if [ -n "$OUT" ]; then
+        echo "$OUT"
+    else
+        printf '{"success":false,"message":"فشل الاتصال بـ MikroTik","details":"تأكد من تفعيل خدمة API وصحة المنفذ وبيانات الدخول"}\n'
+    fi
+}
+
+# ── Run ──────────────────────────────────────────────
+case "$RTYPE" in
+    sas) test_sas ;;
+    dma) test_dma ;;
+    adv) test_adv ;;
+    icm) test_icm ;;
+    um7) test_um7 ;;
+    freenet) test_freenet ;;
+    mikrotik) test_mikrotik ;;
+    *) printf '{"success":false,"message":"نوع سيرفر غير معروف: %s"}\n' "$RTYPE" ;;
+esac

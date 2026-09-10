@@ -1,0 +1,125 @@
+#!/bin/sh
+
+# Set executable permissions for all binaries and scripts
+chmod +x /www/cgi-bin/* /usr/bin/horus-* /etc/init.d/horus_* 2>/dev/null
+rm -f /etc/config/horus_controller-opkg 2>/dev/null
+
+# Get installed package version for cache-busting
+PKG_VER="1.2.161"
+
+# 1. Clean up and restore wireless.js and luci.js if modified by old injectors
+for f in "/www/luci-static/resources/view/network/wireless.js" "/www/luci-static/resources/luci.js"; do
+    if [ -f "$f" ]; then
+        sed -i '/horus_injector/d; /radius_injector/d' "$f" 2>/dev/null
+    fi
+done
+
+# 2. Patch all ucode and Lua templates with version-stamped injector URL.
+# Also loads horus-theme.css globally so horus_injector.js's badges pick up
+# the same design tokens (--h-*) as the plugin's own pages, on every native
+# LuCI page it decorates (e.g. Network > Wireless > Associated Stations).
+inject_css="<link rel=\"stylesheet\" href=\"/luci-static/resources/horus_client/horus-theme.css?v=${PKG_VER}\">"
+inject_js="<script>if(!window._horus_injected){window._horus_injected=true;var _s=document.createElement(\"script\");_s.src=\"/horus_injector.js?v=${PKG_VER}\";document.head.appendChild(_s);}</script>"
+inject="${inject_css}${inject_js}"
+
+find /usr/share/ucode/luci/template/ /usr/lib/lua/luci/view/ /www/ -type f \( -name "*.ut" -o -name "*.htm" \) 2>/dev/null | while read -r p; do
+    # Only touch files that already contain a horus tag (avoids unnecessary
+    # OverlayFS copy-up of unmodified LuCI template files to flash).
+    if grep -q 'horus_injector\|radius_injector\|horus-theme' "$p" 2>/dev/null; then
+        sed -i '/horus_injector/d; /radius_injector/d; /horus-theme.css/d' "$p" 2>/dev/null
+    fi
+
+    if grep -q '</body>' "$p" 2>/dev/null; then
+        sed -i "s|</body>|${inject}\n</body>|g" "$p" 2>/dev/null
+    fi
+done
+
+# 3. Cache-bust every LuCI view/module file this app ships (settings + the
+# shared i18n/styles modules it requires) by renaming each to a
+# version-stamped filename and rewriting every 'require horus_client.X'
+# reference to match. LuCI's own classloader has no reliable built-in cache
+# invalidation for these -- a stale cached i18n.js after an upgrade shows raw
+# translation keys instead of real text, which is exactly the bug this
+# prevents. Safe to re-run: if the version-stamped file already exists, it's
+# a no-op.
+pkg_ver_safe=$(echo "${PKG_VER}" | sed 's/\./_/g')
+res_dir="/www/luci-static/resources/horus_client"
+view_dir="/www/luci-static/resources/view/horus_client"
+resource_modules="i18n styles"
+view_modules="settings"
+
+rename_versioned() {
+    local dir="$1"
+    local name="$2"
+    local target="${dir}/${name}_${pkg_ver_safe}.js"
+    
+    for old in "${dir}/${name}_"*.js; do
+        [ -f "$old" ] && [ "$old" != "$target" ] && rm -f "$old" 2>/dev/null
+    done
+    
+    local src="${dir}/${name}.js"
+    if [ -f "$target" ]; then
+        echo "1"
+        return 0
+    fi
+    if [ -f "$src" ]; then
+        mv "$src" "$target" 2>/dev/null
+        echo "1"
+        return 0
+    fi
+    echo "0"
+    return 1
+}
+
+for m in $resource_modules; do
+    success=$(rename_versioned "$res_dir" "$m")
+    if [ "$success" = "1" ]; then
+        for p in "${res_dir}/"*.js "${view_dir}/"*.js; do
+            [ -f "$p" ] && sed -i "s|horus_client\.${m} |horus_client\.${m}_${pkg_ver_safe} |g" "$p" 2>/dev/null
+        done
+    fi
+done
+
+for m in $view_modules; do
+    success=$(rename_versioned "$view_dir" "$m")
+    if [ "$success" = "1" ]; then
+        for p in "${res_dir}/"*.js "${view_dir}/"*.js; do
+            [ -f "$p" ] && sed -i "s|horus_client\.${m} |horus_client\.${m}_${pkg_ver_safe} |g" "$p" 2>/dev/null
+        done
+        menu_file="/usr/share/luci/menu.d/luci-app-horus-client.json"
+        if [ -f "$menu_file" ]; then
+            sed -i "s|\"horus_client/${m}\"|\"horus_client/${m}_${pkg_ver_safe}\"|g" "$menu_file" 2>/dev/null
+        fi
+    fi
+done
+
+# 3b. Relax the native OpenWrt "Hostname" field so it accepts Arabic, spaces
+# and symbols. OpenWrt marks the field invalid (red underline) because LuCI's
+# System view sets datatype='hostname' (letters/digits/hyphen only). We switch
+# that ONE field's datatype to 'string' (accepts anything), across the JS view
+# (19.07+) and the legacy Lua CBI model. Idempotent and re-applied on every
+# install/upgrade. NOTE: a genuinely non-RFC system hostname (especially with
+# spaces) can confuse DHCP/dnsmasq clients — this is the operator's explicit
+# choice; the P2P host-hint writer already skips non-RFC names for dnsmasq.
+for p in /www/luci-static/resources/view/system/system.js /usr/lib/lua/luci/model/cbi/admin_system/system.lua; do
+    if [ -f "$p" ]; then
+        if grep -q "[.]datatype.*hostname" "$p" 2>/dev/null; then
+            bak="${p}.horus-orig"
+            if [ ! -f "$bak" ]; then
+                cp -p "$p" "$bak" 2>/dev/null
+            fi
+            sed -i 's/\(\.datatype[ 	]*=[ 	]*\)'\''hostname'\''/\1'\''string'\''/g' "$p" 2>/dev/null
+            sed -i 's/\(\.datatype[ 	]*=[ 	]*\)"hostname"/\1"string"/g' "$p" 2>/dev/null
+        fi
+    fi
+done
+
+# 4. Clear ALL LuCI caches (server-side) - forces fresh module load
+rm -f /tmp/luci-indexcache* /tmp/luci-modulecache* /tmp/luci-session* 2>/dev/null
+rm -rf /tmp/luci-* 2>/dev/null
+
+# 5. Write a build stamp file so JS and system can detect version
+echo "${PKG_VER}" > /tmp/horus_pkg_version 2>/dev/null
+echo "${PKG_VER}" > /etc/horus_version 2>/dev/null
+
+exit 0

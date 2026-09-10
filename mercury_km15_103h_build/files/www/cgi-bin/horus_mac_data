@@ -1,0 +1,51 @@
+#!/bin/sh
+. /usr/lib/horus/cgi_auth.sh || exit 1
+horus_require_auth read
+
+printf "Content-Type: application/json\r\n"
+printf "Cache-Control: no-cache\r\n"
+printf "\r\n"
+
+RAD_FILE="/tmp/horus_radius.json"
+PEER_FILE="/tmp/horus_ap_peers.json"
+
+# Build JSON output safely without python3.
+# Strategy: output each section independently, merging at shell level.
+
+# 1. Start with radius data (the base JSON object)
+if [ -f "$RAD_FILE" ] && [ -s "$RAD_FILE" ]; then
+    # Read the file, strip trailing whitespace/newlines, remove last '}'
+    # and append our extra keys before closing
+    awk 'BEGIN{buf=""} {buf=buf $0 "\n"} END{
+        gsub(/[[:space:]]*$/, "", buf);
+        # Remove trailing }
+        if (substr(buf, length(buf), 1) == "}") {
+            buf = substr(buf, 1, length(buf)-1)
+        }
+        printf "%s", buf
+    }' "$RAD_FILE"
+else
+    printf '{"data":[],"status":"disabled"'
+fi
+
+# 2. Append peers
+printf ',"peers":'
+if [ -f "$PEER_FILE" ] && [ -s "$PEER_FILE" ]; then
+    cat "$PEER_FILE"
+else
+    printf '{}'
+fi
+
+# 3. Append ARP table
+printf ',"arp":{'
+FIRST=1
+if [ -f "/proc/net/arp" ]; then
+    while read -r ip type flags mac mask iface; do
+        [ "$flags" = "0x2" ] && [ "$mac" != "00:00:00:00:00:00" ] && {
+            UMAC=$(echo "$mac" | tr 'a-f' 'A-F')
+            [ "$FIRST" = "1" ] && FIRST=0 || printf ','
+            printf '"%s":"%s"' "$UMAC" "$ip"
+        }
+    done < /proc/net/arp
+fi
+printf '}}'

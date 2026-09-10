@@ -4,7 +4,7 @@
   #address-cells = <0x1>;
   #size-cells = <0x1>;
   compatible = "mercury,km15-103h", "mediatek,mt7621-soc";
-  model = "Mercury KM15-103H";
+  model = "HOURS-103AX-NEXT-GEN";
   aliases {
     led-boot = "/leds/wlan2_green";
     led-failsafe = "/leds/sys_blue";

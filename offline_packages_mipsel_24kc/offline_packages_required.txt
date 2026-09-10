@@ -1,0 +1,16 @@
+قائمة الحزم المطلوبة (Offline Packages) لتشغيل إضافة حورس على الراوترات:
+
+يجب تثبيت هذه الحزم بالترتيب التالي لتجنب مشاكل الاعتماديات (Dependencies):
+
+1. zlib
+2. libbz2
+3. libopenssl-conf
+4. libopenssl3
+5. openssl-util
+6. libpython3
+7. python3-base
+8. python3-light
+
+ملاحظات هامة:
+- تم توفير هذه الحزم للإصدارات التي لا تملك إنترنت.
+- باكدجات الـ openssl مهمة جداً لاتصال الريدياس مع سيرفرات ZyadGroup عبر HTTPS.

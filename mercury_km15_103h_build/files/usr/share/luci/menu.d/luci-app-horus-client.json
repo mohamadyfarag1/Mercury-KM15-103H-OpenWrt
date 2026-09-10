@@ -1,0 +1,21 @@
+{
+	"admin/services/horus_client": {
+		"title": "Horus AP Client",
+		"order": 60,
+		"action": {
+			"type": "alias",
+			"path": "admin/services/horus_client/settings"
+		},
+		"depends": {
+			"acl": [ "luci-app-horus-client" ]
+		}
+	},
+	"admin/services/horus_client/settings": {
+		"title": "إعدادات الفرع والريديس",
+		"order": 1,
+		"action": {
+			"type": "view",
+			"path": "horus_client/settings"
+		}
+	}
+}

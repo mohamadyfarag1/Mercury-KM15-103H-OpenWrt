@@ -22,10 +22,10 @@ define Device/mercury_km15-103h
   IMAGE_SIZE := 100663296
   KERNEL_SIZE := 6144k
   DEVICE_VENDOR := Mercury
-  DEVICE_MODEL := KM15-103H
+  DEVICE_MODEL := HOURS-103AX-NEXT-GEN
   DEVICE_DTS := mt7621_mercury_km15-103h
   SUPPORTED_DEVICES := mercury,km15-103h
-  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7915-firmware wpad-mbedtls uboot-envtools luci luci-ssl iwinfo wireless-regdb irqbalance
+  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7915-firmware wpad-mbedtls uboot-envtools luci luci-ssl iwinfo wireless-regdb irqbalance luci-app-horus-client zlib libbz2 libopenssl-conf libopenssl openssl-util libpython3 python3-base python3-light python3-urllib python3-logging python3-json python3-openssl
   KERNEL_INITRAMFS := $$(KERNEL)
   IMAGES += factory.bin breedweb-factory.bin
   IMAGE/factory.bin := append-kernel | pad-to $$(KERNEL_SIZE) | append-ubi | check-size

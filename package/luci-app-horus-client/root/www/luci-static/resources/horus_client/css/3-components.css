@@ -1,0 +1,481 @@
+/* 6. Tables */
+.h-table-wrapper {
+    overflow-x: auto;
+    width: 100%;
+    border: 1px solid var(--h-border);
+    border-radius: var(--h-radius-md);
+    background: var(--h-card-bg);
+    backdrop-filter: var(--h-backdrop);
+    -webkit-backdrop-filter: var(--h-backdrop);
+}
+
+.h-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: start;
+}
+
+.h-table th {
+    background: var(--h-bg-darker);
+    padding: 14px 14px;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--h-text-muted);
+    letter-spacing: 0.02em;
+    border-bottom: 1px solid var(--h-border);
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.h-table td {
+    padding: 12px 14px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--h-border);
+    color: var(--h-text-main);
+    vertical-align: middle;
+    font-variant-numeric: tabular-nums;
+}
+
+.h-table tr:last-child td {
+    border-bottom: none;
+}
+
+.h-table tr:hover td { background-color: var(--h-card-hover); }
+.h-table tr.selected td { background-color: var(--h-primary-bg); }
+
+/* 7. Buttons */
+.h-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 8px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: var(--h-radius-md);
+    cursor: pointer;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+    -webkit-user-select: none;
+    user-select: none;
+    white-space: nowrap;
+    font-family: inherit;
+}
+
+.h-btn:active { transform: translateY(1px); }
+.h-btn:focus-visible { outline: 2px solid var(--h-primary); outline-offset: 2px; }
+
+.h-btn-primary {
+    background: var(--h-gradient);
+    color: var(--h-on-gradient);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    box-shadow: var(--h-shadow-btn);
+    transition: all 0.2s ease;
+}
+.h-btn-primary:hover {
+    filter: brightness(1.10);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 24px rgba(79, 70, 229, 0.55), 0 0 15px rgba(14, 165, 233, 0.35);
+}
+.h-btn-primary:active {
+    transform: translateY(1px);
+    filter: brightness(0.95);
+}
+
+.h-btn-secondary {
+    background-color: transparent;
+    border-color: var(--h-border);
+    color: var(--h-text-main);
+}
+.h-btn-secondary:hover { background-color: var(--h-card-hover); }
+
+.h-btn-danger {
+    background-color: var(--h-error-bg);
+    color: var(--h-error);
+    border-color: rgba(214,69,80,0.25);
+}
+.h-btn-danger:hover { background-color: rgba(214,69,80,0.22); }
+
+.h-btn-success {
+    background-color: var(--h-success);
+    color: #ffffff;
+}
+.h-btn-success:hover { filter: brightness(0.92); }
+
+.h-btn-warning {
+    background-color: var(--h-warning-bg);
+    color: var(--h-warning);
+    border-color: rgba(217,119,6,0.25);
+}
+.h-btn-warning:hover { background-color: rgba(217,119,6,0.22); }
+
+/* Reserved for the "AP awaiting adoption" call-to-action specifically. */
+.h-btn-pending {
+    background-color: var(--h-pending);
+    color: #ffffff;
+    font-weight: 700;
+}
+.h-btn-pending:hover { filter: brightness(0.92); }
+
+.h-btn-icon {
+    padding: 6px;
+    border-radius: var(--h-radius-sm);
+    color: var(--h-text-muted);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+}
+.h-btn-icon:hover { color: var(--h-primary); background-color: var(--h-card-hover); }
+
+.h-btn-sm { padding: 4px 8px; font-size: 11px; }
+.h-btn-lg { padding: 10px 20px; font-size: 14px; }
+
+/* 8. Forms & Inputs */
+.h-input, select.h-input, input.h-input {
+    width: 100%;
+    height: 38px;
+    padding: 8px 12px;
+    background-color: var(--h-bg-darker);
+    border: 1px solid var(--h-border-strong);
+    border-radius: var(--h-radius-md);
+    color: var(--h-text-main);
+    font-size: 13px;
+    transition: all 0.2s ease;
+    outline: none;
+    box-sizing: border-box;
+    box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+}
+select.h-input {
+    appearance: auto;
+    -webkit-appearance: menulist;
+    -moz-appearance: menulist;
+    cursor: pointer;
+}
+select.h-input option {
+    background-color: var(--h-card-bg);
+    color: var(--h-text-main);
+    padding: 8px 12px;
+}
+.h-input:focus { border-color: var(--h-primary); box-shadow: 0 0 0 2px var(--h-primary-bg); }
+
+.h-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-bottom: 16px;
+}
+.h-form-label {
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--h-text-muted);
+}
+
+/* 9. Hardware Bars */
+.h-progress-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 11px;
+    color: var(--h-text-muted);
+}
+.h-progress-bar {
+    flex-grow: 1;
+    height: 6px;
+    background-color: var(--h-border);
+    border-radius: 3px;
+    overflow: hidden;
+    min-width: 50px;
+}
+.h-progress-fill {
+    height: 100%;
+    background-color: var(--h-primary);
+    border-radius: 3px;
+}
+.h-progress-fill.warning { background-color: var(--h-warning); }
+.h-progress-fill.danger { background-color: var(--h-error); }
+
+/* 10. Tabs */
+.h-tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    border-bottom: 1px solid var(--h-border);
+    padding-bottom: 8px;
+    flex-wrap: wrap;
+}
+.h-tab {
+    padding: 6px 12px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--h-text-muted);
+    cursor: pointer;
+    border-radius: var(--h-radius-md);
+    transition: all 0.15s;
+}
+.h-tab:hover { background-color: var(--h-card-hover); color: var(--h-text-main); }
+.h-tab.active { background-color: var(--h-primary-bg); color: var(--h-primary); }
+
+/* Tabs rendered on top of a gradient page header need to read on a colored
+   ground, not on --h-card-hover / --h-primary-bg (both near-invisible there). */
+.h-page-header .h-tabs {
+    border-bottom: none;
+    padding-bottom: 0;
+    margin-bottom: 0;
+}
+.h-page-header .h-tab {
+    color: rgba(255, 255, 255, 0.85);
+}
+.h-page-header .h-tab:hover {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+}
+.h-page-header .h-tab.active {
+    background-color: rgba(255, 255, 255, 0.20);
+    color: #ffffff;
+}
+
+/* Language toggle pill: sits on a plain card in the settings pages, and on
+   the gradient page header in the map/ban pages -- style each context so it
+   stays legible in both, instead of one hardcoded color for either. */
+.h-lang-toggle {
+    background: var(--h-card-bg);
+    color: var(--h-primary);
+    border: 1px solid var(--h-border-strong);
+    border-radius: var(--h-radius-md);
+    padding: 6px 16px;
+    font-weight: 700;
+    font-size: var(--h-font-base);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    height: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    font-family: inherit;
+    box-shadow: 0 0 10px rgba(14, 165, 233, 0.15);
+}
+.h-lang-toggle:hover {
+    background: var(--h-primary-bg);
+    border-color: var(--h-primary);
+    box-shadow: 0 0 18px rgba(14, 165, 233, 0.35);
+    transform: translateY(-1px);
+}
+.h-page-header .h-lang-toggle {
+    background: rgba(255, 255, 255, 0.12);
+    color: #ffffff;
+    border-color: rgba(255, 255, 255, 0.40);
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.15);
+}
+.h-page-header .h-lang-toggle:hover {
+    background: rgba(255, 255, 255, 0.22);
+    border-color: #ffffff;
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
+}
+
+/* 11. Pagination Bar */
+.h-pagination-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 12px 16px;
+    background: var(--h-card-bg);
+    backdrop-filter: var(--h-backdrop);
+    -webkit-backdrop-filter: var(--h-backdrop);
+    border: 1px solid var(--h-border);
+    border-top: none;
+    border-radius: 0 0 var(--h-radius-md) var(--h-radius-md);
+}
+
+.h-pagination-info {
+    font-size: 13px;
+    color: var(--h-text-muted);
+}
+
+.h-pagination-nav {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.h-page-btn {
+    min-width: 32px;
+    height: 32px;
+    padding: 0 10px;
+    font-size: 12px;
+    font-weight: 600;
+    border-radius: var(--h-radius-md);
+    border: 1px solid var(--h-border);
+    background: var(--h-card-bg);
+    backdrop-filter: var(--h-backdrop);
+    -webkit-backdrop-filter: var(--h-backdrop);
+    color: var(--h-text-main);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s ease;
+    user-select: none;
+}
+
+.h-page-btn:hover:not(:disabled) {
+    background: var(--h-card-hover);
+    border-color: var(--h-primary);
+    color: var(--h-primary);
+}
+
+.h-page-btn.active {
+    background: var(--h-primary);
+    border-color: var(--h-primary);
+    color: #ffffff !important;
+}
+
+.h-page-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+}
+
+/* 12. Client Badges & Popover Tooltips */
+.h-badge-circle {
+    min-width: 36px;
+    height: 30px;
+    padding: 0 10px;
+    border-radius: 15px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.15s;
+    user-select: none;
+    text-decoration: none;
+}
+
+.h-badge-circle:hover {
+    transform: scale(1.06);
+}
+
+.h-badge-wireless {
+    background: linear-gradient(135deg, #2E76C9 0%, #1D5AA6 100%);
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(29, 90, 166, 0.32);
+}
+
+.h-badge-wired {
+    background: linear-gradient(135deg, #14A6A0 0%, #0E7C7B 100%);
+    color: #ffffff;
+    box-shadow: 0 2px 6px rgba(14, 124, 123, 0.32);
+}
+
+.h-badge-zero {
+    background: var(--h-bg-darker);
+    border: 1px solid var(--h-border);
+    color: var(--h-text-muted);
+    box-shadow: none;
+    opacity: 0.75;
+}
+
+.h-popover-tooltip {
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    min-width: 270px;
+    max-width: 360px;
+    background: #0b1120 !important;
+    border: 1px solid rgba(255, 255, 255, 0.16) !important;
+    border-radius: 10px;
+    padding: 10px 12px;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.7);
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1), visibility 0.2s, transform 0.2s;
+    pointer-events: none;
+    font-size: 12px;
+    color: #f8fafc;
+    text-align: start;
+}
+
+.h-popover-tooltip::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    height: 16px;
+    background: transparent;
+}
+
+.h-client-badge-wrapper {
+    position: relative;
+    display: inline-block;
+}
+
+.h-client-badge-wrapper:hover .h-popover-tooltip,
+.h-popover-tooltip:hover {
+    opacity: 1 !important;
+    visibility: visible !important;
+    pointer-events: auto !important;
+    transform: translateX(-50%) translateY(-2px) !important;
+}
+
+.h-popover-header {
+    font-weight: 700;
+    font-size: 12px;
+    border-bottom: 1px solid var(--h-border, rgba(255, 255, 255, 0.12));
+    padding-bottom: 6px;
+    margin-bottom: 6px;
+    color: var(--h-primary-2, #38bdf8);
+    display: flex;
+    justify-content: space-between;
+}
+
+.h-popover-item {
+    padding: 4px 0;
+    border-bottom: 1px dashed var(--h-border, rgba(255, 255, 255, 0.08));
+}
+.h-popover-item:last-child {
+    border-bottom: none;
+}
+
+.h-th-sortable {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+}
+.h-th-sortable:hover {
+    color: var(--h-primary) !important;
+}
+
+/* 13. Client Action Dropdown */
+.horus-client-dropdown {
+    display: none;
+    flex-direction: column;
+    gap: 4px;
+    background: var(--h-card-bg, #0f172a);
+    border: 1px solid var(--h-border, rgba(255, 255, 255, 0.15));
+    border-radius: var(--h-radius-md, 8px);
+    padding: 6px;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5);
+    z-index: 9999;
+    min-width: 140px;
+    box-sizing: border-box;
+}
+
+.horus-client-dropdown .h-btn {
+    width: 100%;
+    justify-content: flex-start;
+    text-align: start;
+    padding: 6px 10px;
+    font-size: 12px;
+    gap: 8px;
+    box-sizing: border-box;
+    white-space: nowrap;
+}
+
