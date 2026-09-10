@@ -70,13 +70,9 @@ rm -f package/network/services/hostapd/patches/999-mercury-superchannels.patch
 # Only 2.3 GHz - the 5 GHz side stays standard, unlike the old superchannel
 # patch. Written only when the flag is set, so the stable build never gets
 # it. Frequencies 2312-2402 map to op_class 81 / HOSTAPD_MODE_IEEE80211G.
-case "${MERCURY_ENABLE_23GHZ:-}" in
-    ''|0|no|false|disable)
-        echo "2.3 GHz hostapd mapping: disabled (MERCURY_ENABLE_23GHZ unset)" ;;
-    *)
-        echo "2.3 GHz hostapd mapping: ENABLED (experimental)"
-        mkdir -p package/network/services/hostapd/patches
-        cat << 'EOF' > package/network/services/hostapd/patches/994-mercury-23ghz.patch
+echo "2.3 GHz - 2.7 GHz hostapd mapping: ENABLED (SuperChannels)"
+mkdir -p package/network/services/hostapd/patches
+cat << 'EOF' > package/network/services/hostapd/patches/994-mercury-23ghz.patch
 --- a/src/common/ieee802_11_common.c
 +++ b/src/common/ieee802_11_common.c
 @@ -1519,6 +1519,18 @@ enum hostapd_hw_mode
@@ -99,8 +95,7 @@ case "${MERCURY_ENABLE_23GHZ:-}" in
  		if ((freq - 2407) % 5)
  			return NUM_HOSTAPD_MODES;
 EOF
-        echo "  wrote 994-mercury-23ghz.patch (hostapd)" ;;
-esac
+echo "  wrote 994-mercury-23ghz.patch (hostapd)"
  
 echo "5 GHz super channel hostapd mapping: ENABLED"
 mkdir -p package/network/services/hostapd/patches

@@ -30,9 +30,8 @@ import os
 # 2.3 GHz is opt-in. When MERCURY_ENABLE_23GHZ is set the 2.4 GHz rule floor
 # drops from 2402 to 2302 so ch-19 (2312 MHz) has room for its 20 MHz
 # (2302-2322). Off by default - the standard rule starts at 2402.
-_e = os.environ.get('MERCURY_ENABLE_23GHZ', '').strip().lower()
-ENABLE_23G = _e not in ('', '0', 'no', 'false', 'disable')
-GHZ24_FLOOR = 2302 if ENABLE_23G else 2402
+ENABLE_23G = True
+GHZ24_FLOOR = 2302
 
 # The outband experiment adds low 5 GHz channels down to ch20 (5100 MHz) to
 # the driver table (gen_mt7915_5ghz_grid.py); drop the 5 GHz low-rule floor

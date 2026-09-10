@@ -179,25 +179,17 @@ echo "Patch: $GRIDPATCH  ($(wc -l < "$GRIDPATCH") lines)"
 # (mercury-04) and the regdb 2.3 GHz grant (mercury-06) are gated on the
 # same flag.
 # ---------------------------------------------------------------
-ENABLE_23G="${MERCURY_ENABLE_23GHZ:-}"
-case "$ENABLE_23G" in
-    ''|0|no|false|disable)
-        echo "Step 3e: 2.3 GHz disabled (set MERCURY_ENABLE_23GHZ=1 to include)."
-        ENABLE_23G="" ;;
-    *)
-        echo "======================================="
-        echo "Step 3e: EXPERIMENTAL 2.3 GHz channels (2312-2402 MHz)..."
-        echo "======================================="
-        python3 ../scripts/gen_mt7915_23ghz_patch.py build_dir
-        C23PATCH="package/kernel/mt76/patches/994-mt7915-23ghz.patch"
-        if [ ! -s "$C23PATCH" ]; then
-            echo "!!!! 2.3 GHz patch requested but not generated."
-            exit 1
-        fi
-        echo "Patch: $C23PATCH  ($(wc -l < "$C23PATCH") lines)"
-        echo "NOTE: 2.3 GHz is UNCALIBRATED - measure power on the device."
-        ENABLE_23G="1" ;;
-esac
+ENABLE_23G="1"
+echo "======================================="
+echo "Step 3e: Enabling 2.3 GHz - 2.7 GHz channels for SuperChannels..."
+echo "======================================="
+python3 ../scripts/gen_mt7915_23ghz_patch.py build_dir
+C23PATCH="package/kernel/mt76/patches/994-mt7915-23ghz.patch"
+if [ ! -s "$C23PATCH" ]; then
+    echo "!!!! 2.4G SuperChannels patch requested but not generated."
+    exit 1
+fi
+echo "Patch: $C23PATCH  ($(wc -l < "$C23PATCH") lines)"
 
 # ---------------------------------------------------------------
 # Step 3f: EXPERIMENTAL outband_freq (opt-in, MERCURY_ENABLE_OUTBAND).

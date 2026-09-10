@@ -90,11 +90,9 @@ def patch_outband(text):
     inject = (
         r'\1\n'
         r'\t/* Mercury EXPERIMENTAL: hand the MCU the real centre frequency so\n'
-        r'\t * it can tune non-standard 5 GHz centres its channel table refuses.\n'
-        r'\t * Undocumented vendor field - test on the bench, watch for MCU\n'
-        r'\t * timeouts. 2.4/6 GHz left alone. */\n'
-        r'\tif (chandef->chan->band == NL80211_BAND_5GHZ)\n'
-        r'\t\treq.outband_freq = cpu_to_le32(freq1);\n'
+        r'\t * it can tune non-standard 2.4/5 GHz centres its channel table refuses.\n'
+        r'\t * Undocumented vendor field - test on the bench, watch for MCU timeouts. */\n'
+        r'\treq.outband_freq = cpu_to_le32(freq1);\n'
     )
     t2, n = anchor.subn(inject, t, count=1)
     if n != 1:
