@@ -69,62 +69,6 @@ rm -f package/network/services/hostapd/patches/999-mercury-superchannels.patch
 # it rejects 2312-2402 in AP mode. This teaches it the sub-2.4 GHz range.
 # Only 2.3 GHz - the 5 GHz side stays standard, unlike the old superchannel
 # patch. Written only when the flag is set, so the stable build never gets
-# it. Frequencies 2312-2402 map to op_class 81 / HOSTAPD_MODE_IEEE80211G.
-echo "2.3 GHz - 2.7 GHz hostapd mapping: ENABLED (SuperChannels)"
-mkdir -p package/network/services/hostapd/patches
-cat << 'EOF' > package/network/services/hostapd/patches/994-mercury-23ghz.patch
---- a/src/common/ieee802_11_common.c
-+++ b/src/common/ieee802_11_common.c
-@@ -1519,6 +1519,18 @@ enum hostapd_hw_mode
- 	if (sec_channel > 1 || sec_channel < -1)
- 		return NUM_HOSTAPD_MODES;
- 
-+	/* Mercury EXPERIMENTAL: 2.3 GHz & 2.7 GHz (2312 - 2402 MHz and 2487 - 2702 MHz).
-+	 * Map them to op_class 81 as 11g. Uncalibrated. */
-+	if ((freq >= 2312 && freq <= 2402) || (freq >= 2487 && freq <= 2702)) {
-+		if (freq < 2407 && (freq - 2312) % 5)
-+			return NUM_HOSTAPD_MODES;
-+		if (freq > 2407 && (freq - 2407) % 5)
-+			return NUM_HOSTAPD_MODES;
-+		*channel = (freq - 2407) / 5;
-+		*op_class = 81;
-+		return HOSTAPD_MODE_IEEE80211G;
-+	}
-+
- 	if (freq >= 2412 && freq <= 2472) {
- 		if ((freq - 2407) % 5)
- 			return NUM_HOSTAPD_MODES;
-EOF
-echo "  wrote 994-mercury-23ghz.patch (hostapd)"
-
-echo "Patching mac80211.sh to convert negative channels to their u8 representation for hostapd..."
-sed -i 's/${channel:+channel=$channel}/[ "$channel" -lt 0 ] 2>\/dev\/null \&\& channel=$(( channel + 256 )); ${channel:+channel=$channel}/g' package/network/config/wifi-scripts/files/lib/netifd/wireless/mac80211.sh
-sed -i 's/${channel_list:+chanlist=$channel_list}/[ "$channel_list" -lt 0 ] 2>\/dev\/null \&\& channel_list=$(( channel_list + 256 )); ${channel_list:+chanlist=$channel_list}/g' package/network/config/wifi-scripts/files/lib/netifd/wireless/mac80211.sh
-
- 
-echo "5 GHz super channel hostapd mapping: ENABLED"
-mkdir -p package/network/services/hostapd/patches
-cat << 'EOF' > package/network/services/hostapd/patches/995-mercury-5ghz-super.patch
---- a/src/common/ieee802_11_common.c
-+++ b/src/common/ieee802_11_common.c
-@@ -1030,10 +1030,10 @@ enum hostapd_hw_mode hostapd_freq_to_cha
- 		return HOSTAPD_MODE_IEEE80211A;
- 	}
- 
--	if (freq >= 5000 && freq < 5900) {
-+	if (freq >= 4900 && freq <= 6200) {
- 		if ((freq - 5000) % 5)
- 			return NUM_HOSTAPD_MODES;
- 		*channel = (freq - 5000) / 5;
--		*op_class = 0; /* TODO */
-+		*op_class = 115; /* Mercury KM15-103H: 5GHz super channels */
- 		return HOSTAPD_MODE_IEEE80211A;
- 	}
-EOF
-echo "  wrote 995-mercury-5ghz-super.patch (hostapd)"
- 
- 
-echo "Writing target .config for Mercury KM15-103H..."
 cat << 'EOF' > .config
 # Target System
 CONFIG_TARGET_ramips=y

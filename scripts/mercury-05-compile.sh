@@ -157,7 +157,6 @@ fi
 echo "======================================="
 echo "Step 3d: Installing 5 GHz 5 MHz-grid channel table..."
 echo "======================================="
-python3 ../scripts/gen_mt7915_5ghz_grid.py build_dir
 GRIDPATCH="package/kernel/mt76/patches/995-mt7915-5ghz-grid.patch"
 if [ ! -s "$GRIDPATCH" ]; then
     echo "!!!! 5 GHz grid patch was not generated - the extended channel"
@@ -183,7 +182,6 @@ ENABLE_23G="1"
 echo "======================================="
 echo "Step 3e: Enabling 2.3 GHz - 2.7 GHz channels for SuperChannels..."
 echo "======================================="
-python3 ../scripts/gen_mt7915_23ghz_patch.py build_dir
 C23PATCH="package/kernel/mt76/patches/994-mt7915-23ghz.patch"
 if [ ! -s "$C23PATCH" ]; then
     echo "!!!! 2.4G SuperChannels patch requested but not generated."
