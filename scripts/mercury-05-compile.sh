@@ -86,8 +86,6 @@ for STALE in 999-mercury-superchannels 998-mt7915-he160-dbdc; do
 done
 echo "OK: Stale patches removed."
 
-echo "Step 3.1: Generating HE160-DBDC driver patch..."
-python3 ../scripts/gen_mt7915_he160_dbdc_patch.py build_dir
 
 # ---------------------------------------------------------------
 # Step 3b: Patch mt7915/eeprom.c to add precal fallback.
@@ -432,23 +430,6 @@ echo "OK: 5 GHz 5 MHz-grid channels present across all three sub-bands."
 #     mt7915e: Message 000007ed (seq 15) timeout
 #     ieee80211 phy1: Hardware restart was requested
 #
-# Grep for the upstream comment, not for "dbdc_support" - that identifier
-# appears a dozen times in this file for unrelated reasons and would
-# report OK with the override fully applied. This one line sits directly
-# above the "nss_160 = 0" the override replaces, so it is present exactly
-# when the guard is.
-MT7915_INIT="$MT76_PKG_DIR/mt7915/init.c"
-if [ ! -f "$MT7915_INIT" ]; then
-    echo "!!!! $MT7915_INIT not found - cannot confirm the HE160 guard."
-    exit 1
-fi
-if grep -qF "else if (1)" "$MT7915_INIT"; then
-    echo "OK: mt7915/init.c now FORCES 160 MHz in DBDC mode."
-else
-    echo "!!!! mt7915/init.c still carries the 160MHz guard! The patch failed to apply!"
-    grep -n 'nss_160' "$MT7915_INIT" | head -10
-    exit 1
-fi
 
 # Prove the PATCHED source is what actually got compiled: a module must
 # exist inside this same package tree. Counting channels in a source
