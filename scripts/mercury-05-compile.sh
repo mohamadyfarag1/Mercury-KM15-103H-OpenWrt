@@ -498,10 +498,7 @@ fi
 # experiment on; the regdb grants exactly this, so anything outside would
 # be disabled by cfg80211. The DFS void 5330-5490 must stay empty - a
 # channel there has no regdb rule and would be dead.
-case "${MERCURY_ENABLE_OUTBAND:-}" in
-    ''|0|no|false|disable) LOW_EDGE=5150 ;;
-    *)                     LOW_EDGE=4900 ;;
-esac
+LOW_EDGE=4900
 OFFPLAN=$(grep -oE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" \
     | grep -oE '[0-9]+\)$' | tr -d ')' \
     | awk -v lo="$LOW_EDGE" '$1 < lo || $1 > 6200' \
