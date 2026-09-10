@@ -3,9 +3,9 @@
 # Script 4: Configure OpenWrt for Mercury KM15-103H
 # ===============================================================
 set -e
-
+ 
 cd openwrt
-
+ 
 echo "Injecting custom overlay files from mercury_km15_103h_build/files..."
 mkdir -p files
 cp -r ../mercury_km15_103h_build/files/* files/
@@ -17,12 +17,12 @@ find files/etc/init.d -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/etc/uci-defaults -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/lib -type f -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
 find files/www/cgi-bin -type f -exec chmod +x {} \; 2>/dev/null || true
-
+ 
 # Guarantee pre-compressed wireless.js.gz exists in overlay
 if [ -f files/www/luci-static/resources/view/network/wireless.js ]; then
     gzip -9kf files/www/luci-static/resources/view/network/wireless.js 2>/dev/null || true
 fi
-
+ 
 # Inject patched LuCI wireless.js into feeds/luci source tree
 LUCI_NET_DIR="feeds/luci/modules/luci-mod-network/htdocs/luci-static/resources/view/network"
 if [ -d "$LUCI_NET_DIR" ]; then
@@ -31,12 +31,12 @@ if [ -d "$LUCI_NET_DIR" ]; then
     [ -f files/www/luci-static/resources/view/network/wireless.js.gz ] && \
         cp -f files/www/luci-static/resources/view/network/wireless.js.gz "$LUCI_NET_DIR/wireless.js.gz" 2>/dev/null || true
 fi
-
+ 
 # Guarantee pre-compressed 29_ports.js.gz exists in overlay
 if [ -f files/www/luci-static/resources/view/status/include/29_ports.js ]; then
     gzip -9kf files/www/luci-static/resources/view/status/include/29_ports.js 2>/dev/null || true
 fi
-
+ 
 # Inject custom 29_ports.js into feeds/luci source tree
 LUCI_STATUS_DIR="feeds/luci/modules/luci-mod-status/htdocs/luci-static/resources/view/status/include"
 if [ -d "$LUCI_STATUS_DIR" ]; then
@@ -45,13 +45,13 @@ if [ -d "$LUCI_STATUS_DIR" ]; then
     [ -f files/www/luci-static/resources/view/status/include/29_ports.js.gz ] && \
         cp -f files/www/luci-static/resources/view/status/include/29_ports.js.gz "$LUCI_STATUS_DIR/29_ports.js.gz" 2>/dev/null || true
 fi
-
+ 
 # Inject custom hostapd.sh into wifi-scripts package tree
 if [ -f "files/lib/netifd/hostapd.sh" ]; then
     echo "Injecting custom hostapd.sh with airMAX support into wifi-scripts package..."
     cp -f files/lib/netifd/hostapd.sh package/network/config/wifi-scripts/files/lib/netifd/hostapd.sh 2>/dev/null || true
 fi
-
+ 
 # hostapd ships unpatched: the device runs the standard channel plan only.
 #
 # The old 999-mercury-superchannels.patch taught ieee80211_freq_to_channel_ext()
@@ -63,7 +63,7 @@ fi
 # Leaving the patch in place while the channels are unusable only moves the
 # failure later, so it is removed rather than disabled.
 rm -f package/network/services/hostapd/patches/999-mercury-superchannels.patch
-
+ 
 # EXPERIMENTAL 2.3 GHz (opt-in, MERCURY_ENABLE_23GHZ): stock hostapd's
 # ieee80211_freq_to_channel_ext() only knows 2412-2472/2484 on 2.4 GHz, so
 # it rejects 2312-2402 in AP mode. This teaches it the sub-2.4 GHz range.
@@ -101,13 +101,13 @@ case "${MERCURY_ENABLE_23GHZ:-}" in
 EOF
         echo "  wrote 994-mercury-23ghz.patch (hostapd)" ;;
 esac
-
+ 
 echo "5 GHz super channel hostapd mapping: ENABLED"
 mkdir -p package/network/services/hostapd/patches
 cat << 'EOF' > package/network/services/hostapd/patches/995-mercury-5ghz-super.patch
 --- a/src/common/ieee802_11_common.c
 +++ b/src/common/ieee802_11_common.c
-@@ -1030,14 +1030,14 @@ enum hostapd_hw_mode hostapd_freq_to_cha
+@@ -1030,10 +1030,10 @@ enum hostapd_hw_mode hostapd_freq_to_cha
  		return HOSTAPD_MODE_IEEE80211A;
  	}
  
@@ -116,25 +116,21 @@ cat << 'EOF' > package/network/services/hostapd/patches/995-mercury-5ghz-super.p
  		if ((freq - 5000) % 5)
  			return NUM_HOSTAPD_MODES;
  		*channel = (freq - 5000) / 5;
- 		if (vht_opclass)
- 			*op_class = vht_opclass;
- 		else
--			*op_class = 0;
-+			*op_class = 115; /* Mercury KM15-103H: 5GHz super channels */
- 
+-		*op_class = 0; /* TODO */
++		*op_class = 115; /* Mercury KM15-103H: 5GHz super channels */
  		return HOSTAPD_MODE_IEEE80211A;
  	}
 EOF
 echo "  wrote 995-mercury-5ghz-super.patch (hostapd)"
-
-
+ 
+ 
 echo "Writing target .config for Mercury KM15-103H..."
 cat << 'EOF' > .config
 # Target System
 CONFIG_TARGET_ramips=y
 CONFIG_TARGET_ramips_mt7621=y
 CONFIG_TARGET_ramips_mt7621_DEVICE_mercury_km15-103h=y
-
+ 
 # Wireless Drivers & Firmware
 CONFIG_PACKAGE_kmod-mt7915e=y
 CONFIG_PACKAGE_kmod-mt7915-firmware=y
@@ -143,7 +139,7 @@ CONFIG_PACKAGE_kmod-mt76-connac=y
 CONFIG_PACKAGE_kmod-mt76-core=y
 CONFIG_PACKAGE_wireless-regdb=y
 CONFIG_PACKAGE_wpad-mbedtls=y
-
+ 
 # Web Interface & Management
 CONFIG_PACKAGE_luci=y
 CONFIG_PACKAGE_luci-ssl=y
@@ -157,7 +153,7 @@ CONFIG_PACKAGE_luci-theme-bootstrap=y
 CONFIG_PACKAGE_iwinfo=y
 CONFIG_PACKAGE_rpcd=y
 CONFIG_PACKAGE_rpcd-mod-luci=y
-
+ 
 # System Tools & Utilities
 # irqbalance spreads the mt76 (PCIe WiFi) and GMAC (ethernet) IRQs across
 # all 4 MT7621 hardware threads instead of pinning them to CPU0, which is
@@ -172,7 +168,7 @@ CONFIG_PACKAGE_wget-ssl=y
 CONFIG_PACKAGE_ca-bundle=y
 CONFIG_PACKAGE_mtd=y
 CONFIG_PACKAGE_ubi-utils=y
-
+ 
 # USB 2.0 / 3.0 Storage & Extroot Packages
 CONFIG_PACKAGE_kmod-usb-core=y
 CONFIG_PACKAGE_kmod-usb3=y
@@ -188,7 +184,7 @@ CONFIG_PACKAGE_block-mount=y
 CONFIG_PACKAGE_e2fsprogs=y
 CONFIG_PACKAGE_fdisk=y
 CONFIG_PACKAGE_usbutils=y
-
+ 
 # IPv6 removed - this is an IPv4-only build.
 #
 # OpenWrt pulls odhcpd, odhcp6c, ip6tables and the kernel IPv6 stack in by
@@ -218,12 +214,12 @@ CONFIG_PACKAGE_usbutils=y
 # symbol). With every IPv6 daemon and the ip6tables userland gone, the
 # in-kernel stack being present is inert - nothing configures an address
 # or solicits on any interface.
-
+ 
 # Base filesystem
 CONFIG_TARGET_ROOTFS_SQUASHFS=y
 CONFIG_TARGET_ROOTFS_UBIFS=y
 CONFIG_TARGET_UBIFS_COMPRESSION_ZSTD=y
-
+ 
 # Initramfs image for UART Ymodem recovery / first install.
 # Shorting NAND pin 9 (#CE) makes SPL fall back to Ymodem; send the
 # vendor bootloader dumped from mtd0, then from the U-Boot prompt:
@@ -236,7 +232,7 @@ CONFIG_TARGET_UBIFS_COMPRESSION_ZSTD=y
 # so defconfig discarded it and no RAM image was ever produced. The .itb
 # filename itself comes from KERNEL_INITRAMFS_SUFFIX in mercury-02.
 CONFIG_TARGET_ROOTFS_INITRAMFS=y
-
+ 
 # NOTE: there is deliberately no U-Boot package here. OpenWrt v24.10.2
 # ships uboot-mediatek, uboot-mvebu, ... but NOTHING for ramips/mt7621 -
 # MT7621 boards always run the vendor bootloader, so a u-boot.bin simply
@@ -247,19 +243,19 @@ CONFIG_TARGET_ROOTFS_INITRAMFS=y
 #     dd if=/dev/mtd0 of=/tmp/uboot_vendor.bin   (Bootloader partition)
 # That copy is also the only one guaranteed to match this board's DDR
 # and NAND timings.
-
+ 
 # nand-utils gives the running device flash_erase / nandwrite / nanddump.
 # mercury.sh itself uses OpenWrt's `mtd` for writes, but having the raw
 # tools on the box is what makes manual recovery over SSH possible when
 # something goes wrong - a firmware that can only be fixed over UART is
 # a firmware with a hole in it.
 CONFIG_PACKAGE_nand-utils=y
-
+ 
 EOF
-
+ 
 echo "Running make defconfig..."
 make defconfig
-
+ 
 echo "Verifying mercury_km15-103h device symbol was actually enabled..."
 if ! grep -q '^CONFIG_TARGET_ramips_mt7621_DEVICE_mercury_km15-103h=y' .config; then
 	echo "❌ ERROR: CONFIG_TARGET_ramips_mt7621_DEVICE_mercury_km15-103h=y is NOT set in .config after defconfig!"
@@ -283,7 +279,7 @@ if ! grep -q '^CONFIG_TARGET_ramips_mt7621_DEVICE_mercury_km15-103h=y' .config; 
 	exit 1
 fi
 echo "✅ Device symbol confirmed enabled."
-
+ 
 # ---------------------------------------------------------------
 # Audit what actually survived `make defconfig`.
 #
@@ -296,7 +292,7 @@ echo "✅ Device symbol confirmed enabled."
 # ---------------------------------------------------------------
 echo ""
 echo "Auditing which options survived defconfig..."
-
+ 
 # Dropping any of these produces a firmware that is broken on the device,
 # so they abort the build rather than ship a hole.
 CRITICAL="CONFIG_PACKAGE_kmod-mt7915e \
@@ -305,7 +301,7 @@ CONFIG_PACKAGE_ubi-utils \
 CONFIG_PACKAGE_mtd \
 CONFIG_PACKAGE_wireless-regdb \
 CONFIG_TARGET_ROOTFS_SQUASHFS"
-
+ 
 # Useful but not fatal: the build still yields a working router without them.
 OPTIONAL="CONFIG_TARGET_ROOTFS_INITRAMFS \
 CONFIG_PACKAGE_nand-utils \
@@ -314,7 +310,7 @@ CONFIG_PACKAGE_luci \
 CONFIG_PACKAGE_uboot-envtools \
 CONFIG_PACKAGE_kmod-usb3 \
 CONFIG_PACKAGE_block-mount"
-
+ 
 MISSING=""
 for SYM in $CRITICAL; do
 	if grep -q "^${SYM}=y" .config; then
@@ -331,7 +327,7 @@ for SYM in $OPTIONAL; do
 		echo "  dropped  : $SYM   (optional)"
 	fi
 done
-
+ 
 if [ -n "$MISSING" ]; then
 	echo ""
 	echo "❌ ERROR: defconfig dropped critical option(s):$MISSING"
@@ -346,7 +342,7 @@ if [ -n "$MISSING" ]; then
 	done
 	exit 1
 fi
-
+ 
 # ---------------------------------------------------------------
 # Confirm the IPv6 DAEMONS are gone.
 #
@@ -392,7 +388,7 @@ if [ -n "$IPV6_LEFT" ]; then
 	echo "   solicits on the WAN with no configuration behind it."
 	exit 1
 fi
-
+ 
 # ---------------------------------------------------------------
 # The NAND driver and the bad-block remapping layer are what make this
 # board readable at all: block 6 (0xC0000) is a factory bad block, and
@@ -435,7 +431,7 @@ if [ -n "$NAND_MISSING" ]; then
 	grep -n 'MTK_BMT\|NAND_MT7621\|NMBM' "$KCFG" || echo "(no related symbols in this config)"
 	exit 1
 fi
-
+ 
 # Not fatal on its own, but the whole first-install / brick-recovery plan
 # rests on being able to boot OpenWrt from RAM, so make its absence loud.
 if ! grep -q '^CONFIG_TARGET_ROOTFS_INITRAMFS=y' .config; then
@@ -444,5 +440,5 @@ if ! grep -q '^CONFIG_TARGET_ROOTFS_INITRAMFS=y' .config; then
 	echo "    will be produced, so the UART Ymodem 'boot OpenWrt from RAM' recovery"
 	echo "    path is unavailable and the only install route is sysupgrade."
 fi
-
+ 
 echo "✅ Configuration complete."
