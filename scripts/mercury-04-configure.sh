@@ -96,6 +96,11 @@ cat << 'EOF' > package/network/services/hostapd/patches/994-mercury-23ghz.patch
  			return NUM_HOSTAPD_MODES;
 EOF
 echo "  wrote 994-mercury-23ghz.patch (hostapd)"
+
+echo "Patching mac80211.sh to convert negative channels to their u8 representation for hostapd..."
+sed -i 's/${channel:+channel=$channel}/[ "$channel" -lt 0 ] 2>\/dev\/null \&\& channel=$(( channel + 256 )); ${channel:+channel=$channel}/g' package/network/config/wifi-scripts/files/lib/netifd/wireless/mac80211.sh
+sed -i 's/${channel_list:+chanlist=$channel_list}/[ "$channel_list" -lt 0 ] 2>\/dev\/null \&\& channel_list=$(( channel_list + 256 )); ${channel_list:+chanlist=$channel_list}/g' package/network/config/wifi-scripts/files/lib/netifd/wireless/mac80211.sh
+
  
 echo "5 GHz super channel hostapd mapping: ENABLED"
 mkdir -p package/network/services/hostapd/patches
