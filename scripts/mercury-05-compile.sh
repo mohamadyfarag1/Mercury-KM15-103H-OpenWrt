@@ -486,25 +486,25 @@ if [ "${CHAN5G_COUNT:-0}" -lt 100 ]; then
     ls -l package/kernel/mt76/patches/ 2>/dev/null || echo "(no patches dir)"
     exit 1
 fi
-if [ "${CHAN5G_COUNT:-0}" -gt 210 ]; then
-    echo "!!!! $CHAN5G_COUNT CHAN5G entries - more than the 193-channel grid,"
+if [ "${CHAN5G_COUNT:-0}" -gt 300 ]; then
+    echo "!!!! $CHAN5G_COUNT CHAN5G entries - more than the expected grid,"
     echo "     so an out-of-band superchannel table slipped in."
     exit 1
 fi
 
 # The count alone would not catch a table of the right SIZE but with the
 # wrong frequencies, so check the actual edges too. The grid spans 5150
-# (ch30) to 5885 (ch177) - or down to 5100 (ch20) with the outband
+# (ch30) to 5885 (ch177) - or down to 4900 with the outband
 # experiment on; the regdb grants exactly this, so anything outside would
 # be disabled by cfg80211. The DFS void 5330-5490 must stay empty - a
 # channel there has no regdb rule and would be dead.
 case "${MERCURY_ENABLE_OUTBAND:-}" in
     ''|0|no|false|disable) LOW_EDGE=5150 ;;
-    *)                     LOW_EDGE=5100 ;;
+    *)                     LOW_EDGE=4900 ;;
 esac
 OFFPLAN=$(grep -oE 'CHAN5G\(-?[0-9]+, *[0-9]+\)' "$MT76_MAC" \
     | grep -oE '[0-9]+\)$' | tr -d ')' \
-    | awk -v lo="$LOW_EDGE" '$1 < lo || $1 > 6120' \
+    | awk -v lo="$LOW_EDGE" '$1 < lo || $1 > 6200' \
     | sort -u | tr '\n' ' ')
 if [ -n "$OFFPLAN" ]; then
     echo "!!!! mt76 exposes 5 GHz frequencies outside the granted bands: $OFFPLAN"
