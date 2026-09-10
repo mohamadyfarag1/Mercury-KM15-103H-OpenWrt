@@ -107,7 +107,7 @@ cat << 'EOF' > package/network/services/hostapd/patches/995-mercury-5ghz-super.p
  	}
  
 -	if (freq >= 5000 && freq < 5900) {
-+	if (freq >= 5000 && freq <= 6200) {
++	if (freq >= 4900 && freq <= 6200) {
  		if ((freq - 5000) % 5)
  			return NUM_HOSTAPD_MODES;
  		*channel = (freq - 5000) / 5;
@@ -178,6 +178,29 @@ CONFIG_PACKAGE_kmod-nls-utf8=y
 CONFIG_PACKAGE_block-mount=y
 CONFIG_PACKAGE_e2fsprogs=y
 CONFIG_PACKAGE_fdisk=y
+CONFIG_PACKAGE_usbutils=y
+
+# -------------------------------------------------------------
+# Extreme Performance Optimization (Hardware Offload, SQM, BBR)
+# -------------------------------------------------------------
+# 1. Hardware NAT / Flow Offload: MT7621 CPU hits 100% at ~400 Mbps without this.
+# nft-offload enables the MT7621 PPE (Packet Processing Engine) to route
+# gigabit traffic at 0% CPU utilization.
+CONFIG_PACKAGE_kmod-nft-offload=y
+CONFIG_PACKAGE_kmod-mt7621-hw-hnat=y
+
+# 2. TCP BBR Congestion Control: Replaces Cubic. Drastically improves
+# wireless throughput and reduces latency under packet loss (Wi-Fi).
+CONFIG_PACKAGE_kmod-tcp-bbr=y
+
+# 3. SQM CAKE (Smart Queue Management): The ultimate bufferbloat fix.
+# Cake manages airtime fairness and shapes traffic so gaming latency
+# stays flat even when downloads max out the connection.
+CONFIG_PACKAGE_sqm-scripts=y
+CONFIG_PACKAGE_luci-app-sqm=y
+CONFIG_PACKAGE_kmod-sched-cake=y
+CONFIG_PACKAGE_kmod-ifb=y
+# -------------------------------------------------------------
 CONFIG_PACKAGE_usbutils=y
  
 # IPv6 removed - this is an IPv4-only build.
@@ -304,7 +327,14 @@ CONFIG_PACKAGE_irqbalance \
 CONFIG_PACKAGE_luci \
 CONFIG_PACKAGE_uboot-envtools \
 CONFIG_PACKAGE_kmod-usb3 \
-CONFIG_PACKAGE_block-mount"
+CONFIG_PACKAGE_block-mount \
+CONFIG_PACKAGE_kmod-nft-offload \
+CONFIG_PACKAGE_kmod-mt7621-hw-hnat \
+CONFIG_PACKAGE_kmod-tcp-bbr \
+CONFIG_PACKAGE_sqm-scripts \
+CONFIG_PACKAGE_luci-app-sqm \
+CONFIG_PACKAGE_kmod-sched-cake \
+CONFIG_PACKAGE_kmod-ifb"
  
 MISSING=""
 for SYM in $CRITICAL; do
