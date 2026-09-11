@@ -23,6 +23,16 @@ endef
 
 define Package/luci-app-horus-client/install
 	$(CP) $(PKG_BUILD_DIR)/ipk_root/* $(1)/
+	$(INSTALL_DIR) $(1)/usr/share/horus-logos/www
+	$(CP) ./files/www/* $(1)/usr/share/horus-logos/www/
+endef
+
+define Package/luci-app-horus-client/postinst
+#!/bin/sh
+[ -n "$${IPKG_INSTROOT}" ] || {
+	cp -rf /usr/share/horus-logos/www/* /www/ 2>/dev/null || true
+}
+exit 0
 endef
 
 $(eval $(call BuildPackage,luci-app-horus-client))
