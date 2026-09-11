@@ -96,7 +96,12 @@ CONFIG_PACKAGE_kmod-mt76=y
 CONFIG_PACKAGE_kmod-mt76-connac=y
 CONFIG_PACKAGE_kmod-mt76-core=y
 CONFIG_PACKAGE_wireless-regdb=y
-CONFIG_PACKAGE_wpad-mbedtls=y
+# CONFIG_PACKAGE_wpad-basic-mbedtls is not set
+CONFIG_PACKAGE_wpad-mesh-mbedtls=y
+CONFIG_PACKAGE_kmod-mac80211-mesh=y
+CONFIG_PACKAGE_usteer=y
+CONFIG_PACKAGE_luci-app-usteer=y
+CONFIG_PACKAGE_iw=y
  
 # Web Interface & Management
 CONFIG_PACKAGE_luci=y

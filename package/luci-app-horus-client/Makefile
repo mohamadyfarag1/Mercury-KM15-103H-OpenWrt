@@ -10,19 +10,19 @@ define Package/luci-app-horus-client
   SECTION:=luci
   CATEGORY:=LuCI
   TITLE:=Horus AP Client
-  DEPENDS:=+lua +python3-light +python3-urllib +python3-logging +python3-json
+  DEPENDS:=+lua +python3-light +python3-urllib +python3-logging
 endef
 
 define Build/Prepare
-	mkdir -p $(PKG_BUILD_DIR)
-	tar -xzO -f $(TOPDIR)/package/luci-app-horus-client/luci-app-horus-client_$(PKG_VERSION).ipk ./data.tar.gz | tar -xz -C $(PKG_BUILD_DIR)
+	mkdir -p $(PKG_BUILD_DIR)/ipk_root
+	tar -xzO -f $(TOPDIR)/package/luci-app-horus-client/luci-app-horus-client_$(PKG_VERSION).ipk ./data.tar.gz | tar -xz -C $(PKG_BUILD_DIR)/ipk_root
 endef
 
 define Build/Compile
 endef
 
 define Package/luci-app-horus-client/install
-	$(CP) $(PKG_BUILD_DIR)/* $(1)/
+	$(CP) $(PKG_BUILD_DIR)/ipk_root/* $(1)/
 endef
 
 $(eval $(call BuildPackage,luci-app-horus-client))
