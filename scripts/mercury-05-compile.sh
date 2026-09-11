@@ -304,7 +304,7 @@ echo "  world domain widened in $REG_HITS reg.c copy/copies."
 echo "======================================="
 echo "Step 5: Compiling with CCACHE acceleration..."
 echo "======================================="
-export CCACHE_DIR="/home/runner/.ccache"
+export CCACHE_DIR="/home/runner/.cache/ccache"
 export CCACHE_COMPRESS=1
 export CCACHE_COMPRESSLEVEL=6
 export CCACHE_MAXSIZE="5G"
