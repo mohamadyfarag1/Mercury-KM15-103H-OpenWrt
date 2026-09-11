@@ -1,7 +1,17 @@
 config core 'main'
 	option lang 'auto'
-	option mediaurlbase '/luci-static/openwrt2020'
+	option mediaurlbase '/luci-static/bootstrap'
 	option resourcebase '/luci-static/resources'
+	option ubuspath '/ubus/'
+
+config internal 'languages'
+	option auto 'Automatic'
+	option en 'English'
+	option ar 'العربية'
+
+config internal 'themes'
+	option Bootstrap '/luci-static/bootstrap'
+	option OpenWrt2020 '/luci-static/openwrt2020'
 
 config command 'extroot'
 	option name 'Format USB & Expand Space (Extroot)'
