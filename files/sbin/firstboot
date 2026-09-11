@@ -1,0 +1,10 @@
+#!/bin/sh
+if [ "$1" = "-y" ]; then
+    echo "Horus Soft-Reset..." > /dev/console
+    rm -rf /overlay/upper/etc/config/*
+    cp -f /rom/etc/config/* /overlay/upper/etc/config/ 2>/dev/null
+    rm -f /overlay/upper/etc/passwd /overlay/upper/etc/shadow
+    cp -f /rom/etc/passwd /rom/etc/shadow /overlay/upper/etc/ 2>/dev/null
+    exit 0
+fi
+exec /rom/sbin/firstboot "$@"

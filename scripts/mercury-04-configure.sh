@@ -147,13 +147,17 @@ CONFIG_PACKAGE_kmod-mt7621-hw-hnat=y
 # wireless throughput and reduces latency under packet loss (Wi-Fi).
 CONFIG_PACKAGE_kmod-tcp-bbr=y
 
-# 3. SQM CAKE (Smart Queue Management): The ultimate bufferbloat fix.
-# Cake manages airtime fairness and shapes traffic so gaming latency
-# stays flat even when downloads max out the connection.
-CONFIG_PACKAGE_sqm-scripts=y
-CONFIG_PACKAGE_luci-app-sqm=y
-CONFIG_PACKAGE_kmod-sched-cake=y
-CONFIG_PACKAGE_kmod-ifb=y
+# Add Horus Client native package
+CONFIG_PACKAGE_luci-app-horus-client=y
+
+# Horus RRM Requirement (Moved to IPK Depends)
+# CONFIG_PACKAGE_lua=y
+
+# 3. SQM CAKE (Smart Queue Management): Disabled to allow HW NAT to reach > 400Mbps
+# CONFIG_PACKAGE_sqm-scripts=y
+# CONFIG_PACKAGE_luci-app-sqm=y
+# CONFIG_PACKAGE_kmod-sched-cake=y
+# CONFIG_PACKAGE_kmod-ifb=y
 # -------------------------------------------------------------
 CONFIG_PACKAGE_usbutils=y
  
