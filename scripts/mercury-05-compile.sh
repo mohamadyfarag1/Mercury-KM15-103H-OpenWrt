@@ -105,11 +105,6 @@ else
     echo "NOTE: Precal fallback patch not generated (non-fatal; pattern changed)."
 fi
 
-echo "Generating HE160-DBDC patch..."
-python3 ../scripts/gen_mt7915_he160_dbdc_patch.py build_dir
-
-echo "Generating Superchannels patch..."
-python3 ../scripts/gen_mercury_superchannels_patch.py build_dir
 
 # ---------------------------------------------------------------
 

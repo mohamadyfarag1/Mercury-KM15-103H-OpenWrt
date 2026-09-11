@@ -1,0 +1,35 @@
+--- a/mac80211.c
++++ b/mac80211.c
+@@ -76,6 +76,32 @@
+ 	CHAN5G(169, 5845),
+ 	CHAN5G(173, 5865),
+ 	CHAN5G(177, 5885),
++	/* 4.9 GHz Superchannel */
++	CHAN5G(182, 4910),
++	CHAN5G(183, 4915),
++	CHAN5G(184, 4920),
++	CHAN5G(185, 4925),
++	CHAN5G(186, 4930),
++	CHAN5G(187, 4935),
++	CHAN5G(188, 4940),
++	CHAN5G(189, 4945),
++	CHAN5G(190, 4950),
++	CHAN5G(191, 4955),
++	CHAN5G(192, 4960),
++	CHAN5G(193, 4965),
++	CHAN5G(194, 4970),
++	CHAN5G(195, 4975),
++	CHAN5G(196, 4980),
++	/* Low 5 GHz Band (5000 - 5160 MHz) */
++	CHAN5G(8, 5040),
++	CHAN5G(12, 5060),
++	CHAN5G(16, 5080),
++	CHAN5G(20, 5100),
++	CHAN5G(24, 5120),
++	CHAN5G(28, 5140),
++	CHAN5G(32, 5160),
++	/* UNII-4 extension (5.9 GHz) */
++	CHAN5G(181, 5905),
+ };
+ 
+ static const struct ieee80211_channel mt76_channels_6ghz[] = {

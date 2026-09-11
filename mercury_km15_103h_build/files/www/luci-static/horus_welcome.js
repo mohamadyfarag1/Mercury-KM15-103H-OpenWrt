@@ -35,11 +35,11 @@ document.addEventListener("DOMContentLoaded", function() {
     modal.dir = 'rtl';
 
     var logo = document.createElement('img');
-    logo.src = '/luci-static/bootstrap/logo.svg';
+    logo.src = '/luci-static/openwrt2020/logo.png';
     logo.style.maxHeight = '80px';
     logo.style.marginBottom = '20px';
     logo.onerror = function() {
-        this.src = '/luci-static/resources/horus_client/logo.png';
+        this.src = '/luci-static/bootstrap/logo.svg';
     };
 
     var title = document.createElement('h2');

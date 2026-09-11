@@ -456,12 +456,13 @@ if ! grep -q '^CONFIG_TARGET_ROOTFS_INITRAMFS=y' .config; then
 fi
 
 # ===============================================================
-# Apply 3D Glassy Glowing Horus UI Enhancements to Bootstrap Theme
+# Apply 3D Glassy Glowing Horus UI Enhancements to Themes
 # ===============================================================
-THEME_CSS="feeds/luci/themes/luci-theme-bootstrap/htdocs/luci-static/bootstrap/cascade.css"
-if [ -f "$THEME_CSS" ]; then
-	echo "Applying Horus 3D Glassy Glow CSS to Bootstrap theme..."
-	cat << 'EOF' >> "$THEME_CSS"
+for THEME_CSS in "feeds/luci/themes/luci-theme-bootstrap/htdocs/luci-static/bootstrap/cascade.css" \
+                 "feeds/luci/themes/luci-theme-openwrt-2020/htdocs/luci-static/openwrt2020/cascade.css"; do
+	if [ -f "$THEME_CSS" ]; then
+		echo "Applying Horus 3D Glassy Glow CSS to $THEME_CSS..."
+		cat << 'EOF' >> "$THEME_CSS"
 
 /* Hide version number from header */
 header .pull-right { display: none !important; }
@@ -490,13 +491,17 @@ header .brand:hover {
     transform: translateY(-1px);
 }
 EOF
-fi
+	fi
+done
 
-# Inject welcome script into Bootstrap footer
-THEME_FOOTER="feeds/luci/themes/luci-theme-bootstrap/luasrc/view/themes/bootstrap/footer.htm"
-if [ -f "$THEME_FOOTER" ]; then
-    echo "Injecting Horus Welcome script into Bootstrap theme..."
-    sed -i 's|</body>|<script src="/luci-static/horus_welcome.js"></script>\n</body>|g' "$THEME_FOOTER"
-fi
+# Inject welcome script into Theme footers
+for THEME_FOOTER in "feeds/luci/themes/luci-theme-bootstrap/luasrc/view/themes/bootstrap/footer.htm" \
+                    "feeds/luci/themes/luci-theme-openwrt-2020/luasrc/view/themes/openwrt2020/footer.htm" \
+                    "feeds/luci/themes/luci-theme-openwrt-2020/ucode/template/themes/openwrt2020/footer.ut"; do
+    if [ -f "$THEME_FOOTER" ]; then
+        echo "Injecting Horus Welcome script into $THEME_FOOTER..."
+        sed -i 's|</body>|<script src="/luci-static/horus_welcome.js"></script>\n</body>|g' "$THEME_FOOTER"
+    fi
+done
  
 echo "✅ Configuration complete."
