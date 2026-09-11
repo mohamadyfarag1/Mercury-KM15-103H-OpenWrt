@@ -24,6 +24,10 @@ find files/etc/uci-defaults -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/lib -type f -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
 find files/www/cgi-bin -type f -exec chmod +x {} \; 2>/dev/null || true
 
+# Pre-enable factory_mac in rc.d so it runs on every boot (even after restoring another router's backup)
+mkdir -p files/etc/rc.d
+ln -sf ../init.d/factory_mac files/etc/rc.d/S11factory_mac 2>/dev/null || true
+
  
 # Guarantee pre-compressed wireless.js.gz exists in overlay
 if [ -f files/www/luci-static/resources/view/network/wireless.js ]; then

@@ -1,0 +1,184 @@
+#!/bin/sh /etc/rc.common
+# =====================================================================
+# Mercury KM15-103H Hardware Factory MAC Guardian
+# =====================================================================
+# Ensures this specific router always uses its own unique factory MAC address,
+# preventing cloned MAC collisions when a backup archive from another router is restored.
+# Runs on EVERY boot before networking starts (START=11).
+
+START=11
+
+boot() {
+    . /lib/functions.sh
+    . /lib/functions/system.sh
+
+    # 1. Read hardware factory base MAC from this unit's own NAND flash
+    local base_mac=""
+    base_mac=$(mtd_get_mac_binary Config 0x4)
+    if [ -z "$base_mac" ] || [ "$base_mac" = "00:00:00:00:00:00" ] || [ "$base_mac" = "ff:ff:ff:ff:ff:ff" ]; then
+        base_mac=$(mtd_get_mac_binary Config 0x20004)
+    fi
+    if [ -z "$base_mac" ] || [ "$base_mac" = "00:00:00:00:00:00" ] || [ "$base_mac" = "ff:ff:ff:ff:ff:ff" ]; then
+        base_mac=$(mtd_get_mac_binary Factory 0x4)
+    fi
+    if [ -z "$base_mac" ] || [ "$base_mac" = "00:00:00:00:00:00" ] || [ "$base_mac" = "ff:ff:ff:ff:ff:ff" ]; then
+        base_mac=$(cat /sys/class/net/eth0/address 2>/dev/null)
+    fi
+
+    case "$base_mac" in
+        "" | 00:00:00:00:00:00 | ff:ff:ff:ff:ff:ff)
+            logger -t factory-mac "Error: Could not read local factory MAC from NAND."
+            return 0
+            ;;
+    esac
+
+    # Normalize to lowercase
+    base_mac=$(echo "$base_mac" | tr 'A-Z' 'a-z')
+
+    local wan_mac="$base_mac"
+    local lan_mac
+    lan_mac=$(macaddr_add "$base_mac" 1 | tr 'A-Z' 'a-z')
+    local wifi24_mac
+    wifi24_mac=$(macaddr_add "$base_mac" 2 | tr 'A-Z' 'a-z')
+    local wifi5_mac
+    wifi5_mac=$(macaddr_add "$base_mac" 3 | tr 'A-Z' 'a-z')
+
+    local net_changed=0
+
+    # 2. Check /etc/config/network
+    if [ -f /etc/config/network ]; then
+        # Check all device sections (br-lan, etc.)
+        local d_idx=0
+        local br_lan_found=0
+        while true; do
+            local d_name
+            d_name=$(uci -q get "network.@device[$d_idx].name")
+            [ -n "$d_name" ] || break
+
+            if [ "$d_name" = "br-lan" ]; then
+                br_lan_found=1
+                local curr_d
+                curr_d=$(uci -q get "network.@device[$d_idx].macaddr" | tr 'A-Z' 'a-z')
+                if [ "$curr_d" != "$lan_mac" ]; then
+                    uci set "network.@device[$d_idx].macaddr=$lan_mac"
+                    net_changed=1
+                fi
+            elif [ "$d_name" = "wan" ]; then
+                local curr_d
+                curr_d=$(uci -q get "network.@device[$d_idx].macaddr" | tr 'A-Z' 'a-z')
+                if [ "$curr_d" != "$wan_mac" ]; then
+                    uci set "network.@device[$d_idx].macaddr=$wan_mac"
+                    net_changed=1
+                fi
+            fi
+            d_idx=$(( d_idx + 1 ))
+        done
+
+        # Fallback: if no device named br-lan was checked, check @device[0]
+        if [ "$br_lan_found" = "0" ]; then
+            local curr_lan
+            curr_lan=$(uci -q get network.@device[0].macaddr | tr 'A-Z' 'a-z')
+            if [ -n "$curr_lan" ] && [ "$curr_lan" != "$lan_mac" ]; then
+                uci set network.@device[0].macaddr="$lan_mac"
+                net_changed=1
+            fi
+        fi
+
+        # Check LAN interface MAC if explicitly defined
+        local curr_lan_if
+        curr_lan_if=$(uci -q get network.lan.macaddr | tr 'A-Z' 'a-z')
+        if [ -n "$curr_lan_if" ] && [ "$curr_lan_if" != "$lan_mac" ]; then
+            uci set network.lan.macaddr="$lan_mac"
+            net_changed=1
+        fi
+
+        # Check WAN interface MAC
+        local curr_wan
+        curr_wan=$(uci -q get network.wan.macaddr | tr 'A-Z' 'a-z')
+        if [ "$curr_wan" != "$wan_mac" ]; then
+            uci set network.wan.macaddr="$wan_mac"
+            net_changed=1
+        fi
+
+        if [ "$net_changed" = "1" ]; then
+            uci commit network
+            logger -t factory-mac "Enforced hardware network MACs: WAN=$wan_mac, LAN=$lan_mac"
+        fi
+    fi
+
+    # 3. Check /etc/config/wireless
+    if [ -f /etc/config/wireless ]; then
+        local w_changed=0
+
+        # Check default_radio0 (2.4G)
+        if [ -n "$(uci -q get wireless.default_radio0)" ]; then
+            local curr_w0
+            curr_w0=$(uci -q get wireless.default_radio0.macaddr | tr 'A-Z' 'a-z')
+            if [ "$curr_w0" != "$wifi24_mac" ]; then
+                uci set wireless.default_radio0.macaddr="$wifi24_mac"
+                w_changed=1
+            fi
+        fi
+
+        # Check default_radio1 (5G)
+        if [ -n "$(uci -q get wireless.default_radio1)" ]; then
+            local curr_w1
+            curr_w1=$(uci -q get wireless.default_radio1.macaddr | tr 'A-Z' 'a-z')
+            if [ "$curr_w1" != "$wifi5_mac" ]; then
+                uci set wireless.default_radio1.macaddr="$wifi5_mac"
+                w_changed=1
+            fi
+        fi
+
+        # Check all wifi-iface sections in case custom interfaces were defined
+        local idx=0
+        local r0_count=0
+        local r1_count=0
+        while true; do
+            local dev
+            dev=$(uci -q get "wireless.@wifi-iface[$idx].device")
+            [ -n "$dev" ] || break
+
+            local curr_m
+            curr_m=$(uci -q get "wireless.@wifi-iface[$idx].macaddr" | tr 'A-Z' 'a-z')
+
+            if [ "$dev" = "radio0" ]; then
+                if [ "$r0_count" = "0" ]; then
+                    if [ "$curr_m" != "$wifi24_mac" ]; then
+                        uci set "wireless.@wifi-iface[$idx].macaddr=$wifi24_mac"
+                        w_changed=1
+                    fi
+                elif [ -n "$curr_m" ]; then
+                    # Secondary SSID on radio0: if it had a hardcoded MAC from another router,
+                    # remove it so mac80211/hostapd derives a valid unique BSSID locally
+                    uci delete "wireless.@wifi-iface[$idx].macaddr"
+                    w_changed=1
+                fi
+                r0_count=$(( r0_count + 1 ))
+            elif [ "$dev" = "radio1" ]; then
+                if [ "$r1_count" = "0" ]; then
+                    if [ "$curr_m" != "$wifi5_mac" ]; then
+                        uci set "wireless.@wifi-iface[$idx].macaddr=$wifi5_mac"
+                        w_changed=1
+                    fi
+                elif [ -n "$curr_m" ]; then
+                    # Secondary SSID on radio1: if it had a hardcoded MAC from another router,
+                    # remove it so mac80211/hostapd derives a valid unique BSSID locally
+                    uci delete "wireless.@wifi-iface[$idx].macaddr"
+                    w_changed=1
+                fi
+                r1_count=$(( r1_count + 1 ))
+            fi
+            idx=$(( idx + 1 ))
+        done
+
+        if [ "$w_changed" = "1" ]; then
+            uci commit wireless
+            logger -t factory-mac "Enforced hardware wireless MACs: 2.4G=$wifi24_mac, 5G=$wifi5_mac"
+        fi
+    fi
+}
+
+start() {
+    boot
+}
