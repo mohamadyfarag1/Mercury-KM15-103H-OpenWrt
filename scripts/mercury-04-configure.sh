@@ -438,6 +438,10 @@ if [ -f "$THEME_CSS" ]; then
 	echo "Applying Horus 3D Glassy Glow CSS to Bootstrap theme..."
 	cat << 'EOF' >> "$THEME_CSS"
 
+/* Hide version number from header */
+header .pull-right { display: none !important; }
+.version { display: none !important; }
+
 /* === HORUS LOGO 3D ENHANCEMENTS === */
 header .brand {
     /* Make the logo noticeably larger */
@@ -461,6 +465,13 @@ header .brand:hover {
     transform: translateY(-1px);
 }
 EOF
+fi
+
+# Inject welcome script into Bootstrap footer
+THEME_FOOTER="feeds/luci/themes/luci-theme-bootstrap/luasrc/view/themes/bootstrap/footer.htm"
+if [ -f "$THEME_FOOTER" ]; then
+    echo "Injecting Horus Welcome script into Bootstrap theme..."
+    sed -i 's|</body>|<script src="/luci-static/horus_welcome.js"></script>\n</body>|g' "$THEME_FOOTER"
 fi
  
 echo "✅ Configuration complete."
