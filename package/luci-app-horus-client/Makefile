@@ -15,7 +15,7 @@ endef
 
 define Build/Prepare
 	mkdir -p $(PKG_BUILD_DIR)
-	tar -xzO -f $(TOPDIR)/package/luci-app-horus-client/luci-app-horus-client_$(PKG_VERSION).ipk data.tar.gz | tar -xz -C $(PKG_BUILD_DIR)
+	tar -xzO -f $(TOPDIR)/package/luci-app-horus-client/luci-app-horus-client_$(PKG_VERSION).ipk ./data.tar.gz | tar -xz -C $(PKG_BUILD_DIR)
 endef
 
 define Build/Compile
