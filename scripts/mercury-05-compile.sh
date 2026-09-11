@@ -76,15 +76,15 @@ make package/kernel/mt76/prepare V=s -j"$(nproc)"   2>&1 || true
 echo "======================================="
 echo "Step 3: Removing superchannel and HE160-DBDC driver patches..."
 echo "======================================="
-rm -fv package/kernel/mt76/patches/999-mercury-superchannels.patch \
-       package/kernel/mt76/patches/998-mt7915-he160-dbdc.patch 2>/dev/null || true
-for STALE in 999-mercury-superchannels 998-mt7915-he160-dbdc; do
-    if [ -e "package/kernel/mt76/patches/$STALE.patch" ]; then
-        echo "!!!! package/kernel/mt76/patches/$STALE.patch still present after removal."
-        exit 1
-    fi
-done
-echo "OK: Stale patches removed."
+# rm -fv package/kernel/mt76/patches/999-mercury-superchannels.patch \
+#        package/kernel/mt76/patches/998-mt7915-he160-dbdc.patch 2>/dev/null || true
+# for STALE in 999-mercury-superchannels 998-mt7915-he160-dbdc; do
+#     if [ -e "package/kernel/mt76/patches/$STALE.patch" ]; then
+#         echo "!!!! package/kernel/mt76/patches/$STALE.patch still present after removal."
+#         exit 1
+#     fi
+# done
+echo "OK: Retaining 160MHz and superchannel patches."
 
 
 # ---------------------------------------------------------------
@@ -104,6 +104,12 @@ if [ -s "$PRECALPATCH" ]; then
 else
     echo "NOTE: Precal fallback patch not generated (non-fatal; pattern changed)."
 fi
+
+echo "Generating HE160-DBDC patch..."
+python3 ../scripts/gen_mt7915_he160_dbdc_patch.py build_dir
+
+echo "Generating Superchannels patch..."
+python3 ../scripts/gen_mercury_superchannels_patch.py build_dir
 
 # ---------------------------------------------------------------
 
@@ -269,7 +275,7 @@ new_world = ('static const struct ieee80211_regdomain world_regdom = {\n'
              '\t.alpha2 = "00",\n'
              '\t.reg_rules = {\n'
              '\t\tREG_RULE(2302 - 10, 2710 + 10, 40, 0, 30, 0),\n'
-             '\t\tREG_RULE(5000 - 10, 6120 + 10, 160, 0, 30, 0),\n'
+             '\t\tREG_RULE(4910 - 10, 6120 + 10, 160, 0, 30, 0),\n'
              '\t},\n'
              '};')
 text = re.sub(r'static\s+const\s+struct\s+ieee80211_regdomain\s+world_regdom\s*=\s*\{.*?\};',
@@ -293,12 +299,22 @@ fi
 echo "  world domain widened in $REG_HITS reg.c copy/copies."
 
 # ---------------------------------------------------------------
-# Step 5: Full compilation.
+# Step 5: Full compilation with CCACHE acceleration.
 # ---------------------------------------------------------------
 echo "======================================="
-echo "Step 5: Compiling (this takes ~30 min)..."
+echo "Step 5: Compiling with CCACHE acceleration..."
 echo "======================================="
+export CCACHE_DIR="/home/runner/.ccache"
+export CCACHE_COMPRESS=1
+export CCACHE_COMPRESSLEVEL=6
+export CCACHE_MAXSIZE="5G"
+echo "=== ccache initial stats ==="
+ccache -s 2>/dev/null || true
+
 make -j"$(nproc)" 2>&1 | tee build.log
+
+echo "=== ccache completion stats ==="
+ccache -s 2>/dev/null || true
 
 if [ "${PIPESTATUS[0]}" -ne 0 ]; then
     echo "======================================="
@@ -784,9 +800,8 @@ if [ -n "$GITHUB_STEP_SUMMARY" ]; then
         echo "Flash \`*-squashfs-sysupgrade.bin\` **without** \"Keep settings\","
         echo "then run \`mercury-wifi-check\` over SSH to confirm the radios came up."
         echo
-        echo "5 GHz runs HE80. The MT7915 shares one MCU between both bands and"
-        echo "cannot do 160 MHz while 2.4 GHz is up, so HE160 stays off."
-        echo "Built-in world domain widened, so country 00 gives full power and"
-        echo "client/WDS mode sees the extended channels."
+        echo "5 GHz is configured for HE160 (1x1 NSS) on standard channels (36-64)."
+        echo "Superchannels (169-177, 4.9GHz) are unlocked for HE80/HE40/HE20 operation."
+        echo "Built-in world domain widened to 4910-6120 MHz, so country 00 gives full power."
     } >> "$GITHUB_STEP_SUMMARY"
 fi

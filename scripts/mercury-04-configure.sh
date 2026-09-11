@@ -88,6 +88,11 @@ cat << 'EOF' > .config
 CONFIG_TARGET_ramips=y
 CONFIG_TARGET_ramips_mt7621=y
 CONFIG_TARGET_ramips_mt7621_DEVICE_mercury_km15-103h=y
+
+# Compiler Cache (CCACHE) Acceleration
+CONFIG_DEVEL=y
+CONFIG_CCACHE=y
+CONFIG_CCACHE_DIR="/home/runner/.ccache"
  
 # Wireless Drivers & Firmware
 CONFIG_PACKAGE_kmod-mt7915e=y
