@@ -56,6 +56,29 @@ fi
 
 echo "✅ Format complete."
 
+# Get UUID of the new ext4 partition
+UUID=$(block info "$PARTITION" 2>/dev/null | grep -o -e 'UUID="[^"]*"' | cut -d'"' -f2)
+if [ -z "$UUID" ]; then
+    UUID=$(block info "$PARTITION" 2>/dev/null | grep -o -e 'UUID=\S*' | cut -d'=' -f2 | tr -d '"')
+fi
+
+if [ -z "$UUID" ]; then
+    echo "❌ ERROR: Could not retrieve UUID for $PARTITION!"
+    exit 1
+fi
+
+echo "Partition UUID: $UUID"
+
+# Configure UCI fstab for Extroot on internal NAND
+echo "Configuring fstab for Extroot (/overlay mount)..."
+uci -q delete fstab.overlay
+uci set fstab.overlay="mount"
+uci set fstab.overlay.uuid="${UUID}"
+uci set fstab.overlay.target="/overlay"
+uci set fstab.overlay.enabled="1"
+uci commit fstab
+sync
+
 # Mount and copy current overlay data
 MOUNT_DIR="/tmp/extroot_mnt"
 mkdir -p "$MOUNT_DIR"
@@ -71,29 +94,6 @@ tar -C /overlay -cf - . | tar -C "$MOUNT_DIR" -xf -
 sync
 umount "$MOUNT_DIR"
 rmdir "$MOUNT_DIR" 2>/dev/null || true
-
-# Get UUID of the new ext4 partition
-UUID=$(block info "$PARTITION" 2>/dev/null | grep -o -e 'UUID="[^"]*"' | cut -d'"' -f2)
-if [ -z "$UUID" ]; then
-    UUID=$(block info "$PARTITION" 2>/dev/null | grep -o -e 'UUID=\S*' | cut -d'=' -f2 | tr -d '"')
-fi
-
-if [ -z "$UUID" ]; then
-    echo "❌ ERROR: Could not retrieve UUID for $PARTITION!"
-    exit 1
-fi
-
-echo "Partition UUID: $UUID"
-
-# Configure UCI fstab for Extroot
-echo "Configuring fstab for Extroot (/overlay mount)..."
-uci -q delete fstab.overlay
-uci set fstab.overlay="mount"
-uci set fstab.overlay.uuid="${UUID}"
-uci set fstab.overlay.target="/overlay"
-uci set fstab.overlay.enabled="1"
-uci commit fstab
-sync
 
 echo "=========================================="
 echo "✅ SUCCESS! Extroot is configured."
