@@ -6,9 +6,15 @@
 TARGET_FILE="/www/luci-static/resources/view/system/system.js"
 
 if [ -f "$TARGET_FILE" ]; then
-    # LuCI minifies 'hostname' so we replace the literal assignment
     sed -i "s/datatype='hostname'/datatype='string'/g" "$TARGET_FILE"
     sed -i 's/datatype="hostname"/datatype="string"/g' "$TARGET_FILE"
+fi
+
+if [ -f "${TARGET_FILE}.gz" ]; then
+    gzip -d -f "${TARGET_FILE}.gz" 2>/dev/null || true
+    sed -i "s/datatype='hostname'/datatype='string'/g" "$TARGET_FILE"
+    sed -i 's/datatype="hostname"/datatype="string"/g' "$TARGET_FILE"
+    gzip -9kf "$TARGET_FILE" 2>/dev/null || true
 fi
 
 exit 0

@@ -56,6 +56,15 @@ if [ -d "$LUCI_STATUS_DIR" ]; then
     [ -f files/www/luci-static/resources/view/status/include/29_ports.js.gz ] && \
         cp -f files/www/luci-static/resources/view/status/include/29_ports.js.gz "$LUCI_STATUS_DIR/29_ports.js.gz" 2>/dev/null || true
 fi
+
+# Patch LuCI system.js in feeds/luci to allow UTF-8 / Arabic hostname
+LUCI_SYS_JS="feeds/luci/modules/luci-mod-system/htdocs/luci-static/resources/view/system/system.js"
+if [ -f "$LUCI_SYS_JS" ]; then
+    echo "Patching LuCI system.js in feeds/luci to allow UTF-8 / Arabic hostname..."
+    sed -i "s/datatype='hostname'/datatype='string'/g" "$LUCI_SYS_JS"
+    sed -i 's/datatype="hostname"/datatype="string"/g' "$LUCI_SYS_JS"
+    [ -f "${LUCI_SYS_JS}.gz" ] && gzip -9kf "$LUCI_SYS_JS" 2>/dev/null || true
+fi
  
 # hostapd ships unpatched: the device runs the standard channel plan only.
 #
