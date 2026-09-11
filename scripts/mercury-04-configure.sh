@@ -6,13 +6,19 @@ set -e
  
 cd openwrt
  
-echo "Injecting custom overlay files from mercury_km15_103h_build/files..."
+echo "Copy the custom overlay files (which override the package-provided ones)"
 mkdir -p files
 cp -r ../mercury_km15_103h_build/files/* files/
+
+# Copy custom local packages
+if [ -d ../package ]; then
+	cp -r ../package/* package/
+fi
 # Shell scripts in the overlay must be executable on the device; git on
 # Windows strips the +x bit, so set it explicitly here after the copy.
 find files/usr/bin -type f -exec chmod +x {} \;
 find files/usr/sbin -type f -exec chmod +x {} \; 2>/dev/null || true
+find files/sbin -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/etc/init.d -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/etc/uci-defaults -type f -exec chmod +x {} \; 2>/dev/null || true
 find files/lib -type f -name '*.sh' -exec chmod +x {} \; 2>/dev/null || true
