@@ -6,6 +6,7 @@
 'require rpc';
 'require network';
 'require firewall';
+'require poll';
 
 var callGetBuiltinEthernetPorts = rpc.declare({
 	object: 'luci',
@@ -251,6 +252,14 @@ function renderNetworksTooltip(pmap) {
 	return E([], res);
 }
 
+function formatBytes(bytes) {
+	bytes = parseInt(bytes, 10) || 0;
+	if (bytes >= 1073741824) return (bytes / 1073741824).toFixed(1) + ' GB';
+	if (bytes >= 1048576) return (bytes / 1048576).toFixed(1) + ' MB';
+	if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+	return bytes + ' B';
+}
+
 function executePortAction(port, action) {
 	var url = '/cgi-bin/port_action?port=' + encodeURIComponent(port) + '&action=' + encodeURIComponent(action);
 	return fetch(url).then(function(res) {
@@ -269,9 +278,63 @@ function executeWifiAction(radio) {
 	});
 }
 
+function fetchStatus() {
+	return fetch('/cgi-bin/port_action?action=status').then(function(res) {
+		if (!res.ok) throw new Error('HTTP ' + res.status);
+		return res.json();
+	}).catch(function() {
+		return fs.exec('/usr/bin/port_control', [ 'status' ]).then(function(res) {
+			return JSON.parse(res.stdout || '{}');
+		});
+	});
+}
+
+var _lastCpuTotal = null;
+var _lastCpuIdle = null;
+
+function calculateCpuUsage(statLine) {
+	if (!statLine) return null;
+	var parts = statLine.trim().split(/\s+/);
+	if (parts[0] !== 'cpu' || parts.length < 5) return null;
+
+	var user = parseInt(parts[1], 10) || 0;
+	var nice = parseInt(parts[2], 10) || 0;
+	var sys  = parseInt(parts[3], 10) || 0;
+	var idle = parseInt(parts[4], 10) || 0;
+	var iow  = parseInt(parts[5], 10) || 0;
+	var irq  = parseInt(parts[6], 10) || 0;
+	var sirq = parseInt(parts[7], 10) || 0;
+	var stl  = parseInt(parts[8], 10) || 0;
+
+	var total = user + nice + sys + idle + iow + irq + sirq + stl;
+	var idleAll = idle + iow;
+
+	var res = null;
+	if (_lastCpuTotal !== null && total > _lastCpuTotal) {
+		var diffTotal = total - _lastCpuTotal;
+		var diffIdle = idleAll - _lastCpuIdle;
+		var used = (diffTotal > 0) ? Math.max(0, Math.min(100, Math.round((1 - (diffIdle / diffTotal)) * 100))) : 0;
+		res = {
+			used: used,
+			free: 100 - used
+		};
+	}
+
+	_lastCpuTotal = total;
+	_lastCpuIdle = idleAll;
+	return res;
+}
+
+function getTempColor(temp) {
+	if (temp >= 80) return '#ef4444'; // Red: Hot (>= 80°C)
+	if (temp >= 65) return '#f59e0b'; // Amber: Warm (65-79°C)
+	return '#10b981'; // Green: Normal (< 65°C)
+}
+
 return baseclass.extend({
 	title: '',
 
+	// Fast non-blocking load: only reads lightweight static/cached configurations
 	load: function() {
 		return Promise.all([
 			L.resolveDefault(callGetBuiltinEthernetPorts(), []),
@@ -280,39 +343,26 @@ return baseclass.extend({
 			L.resolveDefault(network.getNetworks(), []),
 			L.resolveDefault(uci.load('network'), null),
 			L.resolveDefault(uci.load('wireless'), null),
-			L.resolveDefault(fs.list('/etc/horus/disabled_ports'), []),
-			L.resolveDefault(network.getWifiDevices(), []),
-			L.resolveDefault(fs.exec('/usr/bin/port_control', [ 'status' ]), null),
-			L.resolveDefault(network.getWifiNetworks(), [])
+			L.resolveDefault(fs.list('/etc/horus/disabled_ports'), [])
 		]);
 	},
 
 	render: function(data) {
-		var cards = [];
+		var container = E('div', {
+			'class': 'km15-status-cards',
+			'style': 'display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-bottom:1.5em; align-items:stretch;'
+		});
+
 		try {
 			var board = JSON.parse(data[1] || '{}'),
 			    known_ports = [],
 			    port_map = buildInterfaceMapping(data[2], data[3]),
-			    disabled_ports_files = data[6] || [],
-			    wifi_devices = data[7] || [],
-			    port_ctl_raw = data[8] ? (data[8].stdout || '') : '',
-			    wifi_networks = data[9] || [],
-			    port_ctl = null;
-
-			try {
-				if (port_ctl_raw) port_ctl = JSON.parse(port_ctl_raw);
-			} catch (e) {}
+			    disabled_ports_files = data[6] || [];
 
 			var disabledMap = {};
 			disabled_ports_files.forEach(function(f) {
 				if (f && f.name) disabledMap[f.name] = true;
 			});
-
-			if (port_ctl && port_ctl.ports) {
-				for (var p in port_ctl.ports) {
-					if (port_ctl.ports[p].disabled) disabledMap[p] = true;
-				}
-			}
 
 			if (Array.isArray(data[0]) && data[0].length > 0) {
 				known_ports = data[0].map(function(port) {
@@ -361,6 +411,54 @@ return baseclass.extend({
 				return L.naturalCompare(a.device, b.device);
 			});
 
+			// 1. CPU Dashboard Box
+			var cpuCard = E('div', {
+				'class': 'ifacebox',
+				'id': 'km15-card-cpu',
+				'style': 'margin:.35em; width:124px; min-width:124px; max-width:124px; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.1); border:1px solid #99f6e4; display:flex; flex-direction:column; justify-content:space-between;'
+			}, [
+				E('div', {
+					'class': 'ifacebox-head',
+					'style': 'background:#0f766e; color:#fff; font-weight:bold; font-size:12px; height:24px; line-height:24px; text-align:center;'
+				}, [ _('CPU / المعالج') ]),
+				E('div', {
+					'class': 'ifacebox-body',
+					'style': 'height:78px; padding:4px 6px; background:#fff; display:flex; flex-direction:column; justify-content:center; align-items:center;'
+				}, [
+					E('div', {
+						'id': 'km15-cpu-temp',
+						'style': 'margin-bottom:4px; font-size:10px; font-weight:700; padding:1px 8px; border-radius:10px; color:#fff; background:#10b981;',
+						'title': _('CPU Temperature / درجة حرارة المعالج')
+					}, [ '🌡️ --°C' ]),
+					E('div', {
+						'style': 'width:100%; background:#e2e8f0; border-radius:4px; height:7px; overflow:hidden; margin-bottom:4px;'
+					}, [
+						E('div', {
+							'id': 'km15-cpu-bar',
+							'style': 'width:0%; height:100%; background:#10b981; transition:width 0.4s ease, background 0.4s ease;'
+						})
+					]),
+					E('div', { 'style': 'font-size:10px; font-weight:700; color:#1e293b; line-height:1.2; text-align:center;' }, [
+						E('span', { 'id': 'km15-cpu-used', 'style': 'color:#0f766e;' }, [ _('Used: --%') ]),
+						E('br'),
+						E('span', { 'id': 'km15-cpu-free', 'style': 'color:#64748b; font-weight:600;' }, [ _('Free: --%') ])
+					])
+				]),
+				E('div', { 'class': 'ifacebox-head', 'style': 'height:3px; background:#0f766e;' }),
+				E('div', {
+					'class': 'ifacebox-body',
+					'style': 'padding:6px 4px; background:#f8fafc; border-top:1px solid #f1f5f9; display:flex; flex-direction:column; justify-content:space-between; flex:1;'
+				}, [
+					E('div', { 'style': 'text-align:center; font-size:10px; line-height:1.4; color:#475569; min-height:38px;' }, [
+						E('div', { 'id': 'km15-cpu-load', 'style': 'font-weight:600; color:#334155; margin-bottom:2px;' }, [ 'Load: --' ]),
+						E('div', { 'style': 'font-size:9px; color:#64748b;' }, [ 'MT7621AT @ 880M' ]),
+						E('div', { 'style': 'font-size:9px; color:#10b981; font-weight:700;' }, [ '● Live' ])
+					])
+				])
+			]);
+			container.appendChild(cpuCard);
+
+			// 2. Ethernet Port Cards (WAN, LAN1..4)
 			known_ports.forEach(function(port) {
 				var devname = port.netdev ? port.netdev.getName() : port.device,
 				    speed = port.netdev ? port.netdev.getSpeed() : null,
@@ -368,6 +466,7 @@ return baseclass.extend({
 				    carrier = port.netdev ? port.netdev.getCarrier() : false,
 				    isDisabled = !!disabledMap[devname],
 				    pmap = port_map[devname];
+
 				var pzones = [ null ];
 				if (pmap && Array.isArray(pmap.zones) && pmap.zones.length > 0) {
 					pzones = pmap.zones.filter(Boolean).sort(function(a, b) {
@@ -378,20 +477,13 @@ return baseclass.extend({
 					if (pzones.length === 0) pzones = [ null ];
 				}
 
-				if (port_ctl && port_ctl.ports && port_ctl.ports[devname]) {
-					var cp = port_ctl.ports[devname];
-					if (cp.carrier !== undefined) carrier = !!cp.carrier;
-					if (cp.speed) speed = parseInt(cp.speed, 10);
-					if (cp.duplex) duplex = cp.duplex;
-					if (cp.disabled) isDisabled = true;
-				}
-
 				var iconState = isDisabled ? 'down' : (carrier ? 'up' : 'down');
 				var headerBg = (devname === 'wan') ? '#0284c7' : '#0ea5e9';
 				var isWan = (devname === 'wan');
 				var portLabel = isWan ? 'WAN' : devname.toUpperCase();
 
 				var actionBtn = E('button', {
+					'id': 'km15-btn-' + devname,
 					'class': 'btn btn-sm ' + (isDisabled ? 'btn-primary' : 'btn-danger'),
 					'style': 'width:100%; font-size:11px; height:26px; padding:2px 4px; margin-top:6px; font-weight:700; border-radius:4px; cursor:pointer; display:flex; align-items:center; justify-content:center;',
 					'click': function(ev) {
@@ -405,7 +497,7 @@ return baseclass.extend({
 							ev.target.disabled = true;
 							ev.target.innerText = '...';
 							executePortAction(devname, nextAction).then(function() {
-								setTimeout(function() { location.reload(); }, 600);
+								window.setTimeout(doLiveUpdate, 800);
 							}).catch(function(e) {
 								ui.addNotification(null, E('p', 'Error: ' + e));
 								ev.target.disabled = false;
@@ -417,8 +509,9 @@ return baseclass.extend({
 				var tx_b = port.netdev ? (port.netdev.getTXBytes() || 0) : 0;
 				var rx_b = port.netdev ? (port.netdev.getRXBytes() || 0) : 0;
 
-				cards.push(E('div', {
+				var portCard = E('div', {
 					'class': 'ifacebox',
+					'id': 'km15-card-' + devname,
 					'style': 'margin:.35em; width:124px; min-width:124px; max-width:124px; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.1); border:1px solid ' + (isDisabled ? '#f87171' : '#cbd5e1') + '; display:flex; flex-direction:column; justify-content:space-between;'
 				}, [
 					E('div', {
@@ -427,10 +520,11 @@ return baseclass.extend({
 					}, [ portLabel ]),
 					E('div', { 'class': 'ifacebox-body', 'style': 'height:78px; padding:6px 4px; background:#fff; display:flex; flex-direction:column; justify-content:center; align-items:center;' }, [
 						E('img', {
+							'id': 'km15-icon-' + devname,
 							'src': L.resource('icons/port_%s.png').format(iconState),
 							'style': 'height:26px; width:26px; vertical-align:middle;' + (isDisabled ? 'filter:grayscale(100%) opacity(50%);' : '')
 						}),
-						E('div', { 'style': 'font-size:11px; margin-top:5px; font-weight:600; line-height:1.2;' }, [ formatSpeed(carrier, speed, duplex, isDisabled) ])
+						E('div', { 'id': 'km15-speed-' + devname, 'style': 'font-size:11px; margin-top:5px; font-weight:600; line-height:1.2;' }, [ formatSpeed(carrier, speed, duplex, isDisabled) ])
 					]),
 					E('div', { 'class': 'ifacebox-head cbi-tooltip-container', 'style': 'display:flex; height:3px;' }, [
 						E([], pzones.map(function(zone) {
@@ -443,19 +537,24 @@ return baseclass.extend({
 					]),
 					E('div', { 'class': 'ifacebox-body', 'style': 'padding:6px 4px; background:#f8fafc; border-top:1px solid #f1f5f9; display:flex; flex-direction:column; justify-content:space-between; flex:1;' }, [
 						E('div', { 'class': 'cbi-tooltip-container', 'style': 'text-align:left; font-size:11px; line-height:1.4; color:#475569; min-height:38px;' }, [
-							E('span', { 'style': 'color:#10b981;' }, '\u25b2 '), '%1024.1mB'.format(tx_b),
+							E('span', { 'style': 'color:#10b981;' }, '\u25b2 '),
+							E('span', { 'id': 'km15-tx-' + devname }, [ formatBytes(tx_b) ]),
 							E('br'),
-							E('span', { 'style': 'color:#3b82f6;' }, '\u25bc '), '%1024.1mB'.format(rx_b),
+							E('span', { 'style': 'color:#3b82f6;' }, '\u25bc '),
+							E('span', { 'id': 'km15-rx-' + devname }, [ formatBytes(rx_b) ]),
 							port.netdev ? E('span', { 'class': 'cbi-tooltip' }, formatStats(port.netdev)) : ''
 						]),
 						actionBtn
 					])
-				]));
+				]);
+
+				container.appendChild(portCard);
 			});
 
+			// 3. Wi-Fi Radios (Wi-Fi 2.4G, Wi-Fi 5G)
 			var radios = [
-				{ id: 'radio0', label: 'Wi-Fi 2.4G', freq: '2.4 GHz', default_ssid: 'Horus-2.4G' },
-				{ id: 'radio1', label: 'Wi-Fi 5G',  freq: '5 GHz',    default_ssid: 'Horus-5G' }
+				{ id: 'radio0', label: 'Wi-Fi 2.4G', default_ssid: 'Horus-2.4G' },
+				{ id: 'radio1', label: 'Wi-Fi 5G',  default_ssid: 'Horus-5G' }
 			];
 
 			radios.forEach(function(r) {
@@ -463,23 +562,6 @@ return baseclass.extend({
 				var channel = 'Auto';
 				var htmode = '';
 				var iface_ssid = r.default_ssid;
-				var iface_mode = 'AP';
-				var iface_netdev = null;
-
-				for (var wi = 0; wi < wifi_networks.length; wi++) {
-					var wn = wifi_networks[wi];
-					if (wn && wn.getDeviceName && wn.getDeviceName() === r.id) {
-						if (wn.getSSID && wn.getSSID()) iface_ssid = wn.getSSID();
-						if (wn.getMode && wn.getMode()) iface_mode = wn.getMode().toUpperCase();
-						if (wn.getChannel && wn.getChannel()) channel = wn.getChannel();
-						if (wn.isDisabled && wn.isDisabled()) isDisabled = true;
-						if (wn.getDevice) {
-							var nd = wn.getDevice();
-							if (nd) iface_netdev = nd;
-						}
-						break;
-					}
-				}
 
 				try {
 					if (uci.get('wireless', r.id, 'disabled') === '1') isDisabled = true;
@@ -490,33 +572,13 @@ return baseclass.extend({
 					for (var j = 0; j < ifaces.length; j++) {
 						if (ifaces[j].device === r.id) {
 							iface_ssid = ifaces[j].ssid || iface_ssid;
-							iface_mode = (ifaces[j].mode || iface_mode).toUpperCase();
-							if (ifaces[j].ifname && !iface_netdev)
-								iface_netdev = network.instantiateDevice(ifaces[j].ifname);
 							break;
 						}
 					}
 				} catch (e) {}
 
-				if (port_ctl && port_ctl.wireless && port_ctl.wireless[r.id]) {
-					var rw = port_ctl.wireless[r.id];
-					if (rw.disabled !== undefined) isDisabled = (rw.disabled === 1 || rw.disabled === '1');
-					if (rw.channel) channel = rw.channel;
-					if (rw.htmode) htmode = rw.htmode;
-					if (rw.ssid) iface_ssid = rw.ssid;
-					if (rw.mode) iface_mode = rw.mode.toUpperCase();
-					if (rw.ifname && !iface_netdev) iface_netdev = network.instantiateDevice(rw.ifname);
-				}
-
-				if (!iface_netdev) {
-					var fallbackName = (r.id === 'radio0') ? 'phy0-ap0' : 'phy1-ap0';
-					iface_netdev = network.instantiateDevice(fallbackName);
-				}
-
-				var tx_b = iface_netdev ? (iface_netdev.getTXBytes() || 0) : 0;
-				var rx_b = iface_netdev ? (iface_netdev.getRXBytes() || 0) : 0;
-
 				var wifiActionBtn = E('button', {
+					'id': 'km15-wifibtn-' + r.id,
 					'class': 'btn btn-sm ' + (isDisabled ? 'btn-primary' : 'btn-danger'),
 					'style': 'width:100%; font-size:11px; height:26px; padding:2px 4px; margin-top:6px; font-weight:700; border-radius:4px; cursor:pointer; display:flex; align-items:center; justify-content:center;',
 					'click': function(ev) {
@@ -524,7 +586,7 @@ return baseclass.extend({
 						ev.target.disabled = true;
 						ev.target.innerText = '...';
 						executeWifiAction(r.id).then(function() {
-							setTimeout(function() { location.reload(); }, 1000);
+							window.setTimeout(doLiveUpdate, 1500);
 						}).catch(function(e) {
 							ui.addNotification(null, E('p', 'Error: ' + e));
 							ev.target.disabled = false;
@@ -533,27 +595,19 @@ return baseclass.extend({
 				}, [ isDisabled ? _('Turn On / تشغيل') : _('Turn Off / إيقاف') ]);
 
 				var statusBadge = E('span', {
+					'id': 'km15-wifistate-' + r.id,
 					'style': 'display:inline-block; font-size:10px; font-weight:700; padding:1px 8px; border-radius:10px; color:#fff; background:' + (isDisabled ? '#94a3b8' : '#10b981') + ';'
 				}, [ isDisabled ? 'OFF' : 'ON' ]);
 
-				var badges = [ statusBadge ];
-				var r_temp = (port_ctl && port_ctl.wireless && port_ctl.wireless[r.id] && port_ctl.wireless[r.id].temp !== undefined)
-					? parseInt(port_ctl.wireless[r.id].temp, 10) : 0;
-				if (r_temp > 0) {
-					var tempColor = '#10b981'; // Green: Normal (<65°C)
-					if (r_temp >= 80) {
-						tempColor = '#ef4444'; // Red: Hot (>=80°C)
-					} else if (r_temp >= 65) {
-						tempColor = '#f59e0b'; // Amber: Warm (65-79°C)
-					}
-					badges.push(E('span', {
-						'style': 'display:inline-block; margin-left:4px; font-size:10px; font-weight:700; padding:1px 6px; border-radius:10px; color:#fff; background:' + tempColor + ';',
-						'title': _('Wireless Radio Temperature / درجة حرارة الكارت')
-					}, [ '\ud83c\udf21\ufe0f ' + r_temp + '\u00b0C' ]));
-				}
+				var tempBadge = E('span', {
+					'id': 'km15-wifitemp-' + r.id,
+					'style': 'display:inline-block; margin-left:4px; font-size:10px; font-weight:700; padding:1px 6px; border-radius:10px; color:#fff; background:#10b981;',
+					'title': _('Wireless Radio Temperature / درجة حرارة الكارت')
+				}, [ '🌡️ --°C' ]);
 
-				cards.push(E('div', {
+				var wifiCard = E('div', {
 					'class': 'ifacebox',
+					'id': 'km15-card-' + r.id,
 					'style': 'margin:.35em; width:124px; min-width:124px; max-width:124px; border-radius:8px; overflow:hidden; box-shadow:0 1px 3px rgba(0,0,0,0.1); border:1px solid ' + (isDisabled ? '#cbd5e1' : '#60a5fa') + '; display:flex; flex-direction:column; justify-content:space-between;'
 				}, [
 					E('div', {
@@ -561,32 +615,202 @@ return baseclass.extend({
 						'style': 'background:' + (r.id === 'radio1' ? '#4f46e5' : '#2563eb') + '; color:#fff; font-weight:bold; font-size:12px; height:24px; line-height:24px; text-align:center;'
 					}, [ r.label ]),
 					E('div', { 'class': 'ifacebox-body', 'style': 'height:78px; padding:6px 4px; background:#fff; display:flex; flex-direction:column; justify-content:center; align-items:center;' }, [
-						E('div', { 'style': 'margin-bottom:3px; display:flex; align-items:center; justify-content:center;' }, badges),
-						E('div', { 'style': 'font-size:12px; font-weight:700; color:#1e293b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:116px; margin-bottom:2px;' }, [ iface_ssid ]),
-						E('div', { 'style': 'font-size:10px; color:#64748b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:116px;' }, [
+						E('div', { 'style': 'margin-bottom:3px; display:flex; align-items:center; justify-content:center;' }, [ statusBadge, tempBadge ]),
+						E('div', { 'id': 'km15-wifissid-' + r.id, 'style': 'font-size:12px; font-weight:700; color:#1e293b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:116px; margin-bottom:2px;' }, [ iface_ssid ]),
+						E('div', { 'id': 'km15-wifichan-' + r.id, 'style': 'font-size:10px; color:#64748b; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:116px;' }, [
 							isDisabled ? _('Disabled / معطل') : (channel + (htmode ? ' (' + htmode + ')' : ''))
 						])
 					]),
-					E('div', { 'class': 'ifacebox-head', 'style': 'height:3px; background:' + (isDisabled ? '#cbd5e1' : '#10b981') + ';' }),
+					E('div', { 'id': 'km15-wifibar-' + r.id, 'class': 'ifacebox-head', 'style': 'height:3px; background:' + (isDisabled ? '#cbd5e1' : '#10b981') + ';' }),
 					E('div', { 'class': 'ifacebox-body', 'style': 'padding:6px 4px; background:#f8fafc; border-top:1px solid #f1f5f9; display:flex; flex-direction:column; justify-content:space-between; flex:1;' }, [
 						E('div', { 'style': 'text-align:left; font-size:11px; line-height:1.4; color:#475569; min-height:38px;' }, [
-							E('span', { 'style': 'color:#10b981;' }, '\u25b2 '), '%1024.1mB'.format(tx_b),
+							E('span', { 'style': 'color:#10b981;' }, '\u25b2 '),
+							E('span', { 'id': 'km15-wifitx-' + r.id }, [ '0 B' ]),
 							E('br'),
-							E('span', { 'style': 'color:#3b82f6;' }, '\u25bc '), '%1024.1mB'.format(rx_b)
+							E('span', { 'style': 'color:#3b82f6;' }, '\u25bc '),
+							E('span', { 'id': 'km15-wifirx-' + r.id }, [ '0 B' ])
 						]),
 						wifiActionBtn
 					])
-				]));
+				]);
+
+				container.appendChild(wifiCard);
 			});
 
-			return E('div', {
-				'style': 'display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-bottom:1.5em; align-items:stretch;'
-			}, cards);
+			// Asynchronous in-place DOM updater function
+			function applyLiveStatus(st) {
+				if (!st) return;
+
+				// Update CPU card
+				if (st.cpu) {
+					var cpuUsage = calculateCpuUsage(st.cpu.stat);
+					var usedElem = document.getElementById('km15-cpu-used');
+					var freeElem = document.getElementById('km15-cpu-free');
+					var barElem  = document.getElementById('km15-cpu-bar');
+
+					if (cpuUsage && usedElem && freeElem && barElem) {
+						usedElem.innerText = _('Used: %d%').format(cpuUsage.used);
+						freeElem.innerText = _('Free: %d%').format(cpuUsage.free);
+						barElem.style.width = cpuUsage.used + '%';
+						barElem.style.background = (cpuUsage.used >= 85) ? '#ef4444' : ((cpuUsage.used >= 60) ? '#f59e0b' : '#10b981');
+					} else if (st.cpu.loadavg && usedElem && usedElem.innerText.indexOf('--%') !== -1) {
+						var l1 = parseFloat(st.cpu.loadavg.split(' ')[0]) || 0;
+						var estUsed = Math.min(100, Math.round(l1 * 50));
+						usedElem.innerText = _('Used: ~%d%').format(estUsed);
+						freeElem.innerText = _('Free: ~%d%').format(100 - estUsed);
+						if (barElem) barElem.style.width = estUsed + '%';
+					}
+
+					var tempElem = document.getElementById('km15-cpu-temp');
+					if (tempElem) {
+						var cTemp = parseInt(st.cpu.temp, 10) || 0;
+						if (cTemp > 0 && cTemp < 150) {
+							tempElem.innerText = '🌡️ ' + cTemp + '°C';
+							tempElem.style.background = getTempColor(cTemp);
+						} else {
+							tempElem.innerText = '🌡️ --°C';
+						}
+					}
+
+					var loadElem = document.getElementById('km15-cpu-load');
+					if (loadElem && st.cpu.loadavg) {
+						var lparts = st.cpu.loadavg.split(/\s+/);
+						loadElem.innerText = 'Load: ' + (lparts.slice(0, 2).join(', ') || '--');
+					}
+				}
+
+				// Update Ethernet port cards
+				if (st.ports) {
+					for (var p in st.ports) {
+						var cp = st.ports[p];
+						var cardNode = document.getElementById('km15-card-' + p);
+						var iconNode = document.getElementById('km15-icon-' + p);
+						var speedNode = document.getElementById('km15-speed-' + p);
+						var btnNode = document.getElementById('km15-btn-' + p);
+						var txNode = document.getElementById('km15-tx-' + p);
+						var rxNode = document.getElementById('km15-rx-' + p);
+
+						var isDis = !!cp.disabled;
+						var car   = !!cp.carrier;
+						var sp    = parseInt(cp.speed, 10) || 0;
+						var dup   = cp.duplex || '';
+
+						if (cardNode) {
+							cardNode.style.borderColor = isDis ? '#f87171' : (car ? '#60a5fa' : '#cbd5e1');
+						}
+
+						if (iconNode) {
+							var icState = isDis ? 'down' : (car ? 'up' : 'down');
+							iconNode.src = L.resource('icons/port_%s.png').format(icState);
+							iconNode.style.filter = isDis ? 'grayscale(100%) opacity(50%)' : '';
+						}
+
+						if (speedNode) {
+							speedNode.innerText = '';
+							speedNode.appendChild(formatSpeed(car, sp, dup, isDis));
+						}
+
+						if (btnNode) {
+							btnNode.disabled = false;
+							btnNode.className = 'btn btn-sm ' + (isDis ? 'btn-primary' : 'btn-danger');
+							btnNode.innerText = isDis ? _('Enable / تفعيل') : _('Disable / إيقاف');
+						}
+
+						if (txNode && cp.tx_bytes !== undefined) txNode.innerText = formatBytes(cp.tx_bytes);
+						if (rxNode && cp.rx_bytes !== undefined) rxNode.innerText = formatBytes(cp.rx_bytes);
+					}
+				}
+
+				// Update Wireless cards
+				if (st.wireless) {
+					for (var r in st.wireless) {
+						var rw = st.wireless[r];
+						var wCardNode  = document.getElementById('km15-card-' + r);
+						var wStateNode = document.getElementById('km15-wifistate-' + r);
+						var wTempNode  = document.getElementById('km15-wifitemp-' + r);
+						var wSsidNode  = document.getElementById('km15-wifissid-' + r);
+						var wChanNode  = document.getElementById('km15-wifichan-' + r);
+						var wBarNode   = document.getElementById('km15-wifibar-' + r);
+						var wBtnNode   = document.getElementById('km15-wifibtn-' + r);
+						var wTxNode    = document.getElementById('km15-wifitx-' + r);
+						var wRxNode    = document.getElementById('km15-wifirx-' + r);
+
+						var isDis = (rw.disabled === 1 || rw.disabled === '1');
+
+						if (wCardNode) {
+							wCardNode.style.borderColor = isDis ? '#cbd5e1' : '#60a5fa';
+						}
+
+						if (wStateNode) {
+							wStateNode.innerText = isDis ? 'OFF' : 'ON';
+							wStateNode.style.background = isDis ? '#94a3b8' : '#10b981';
+						}
+
+						if (wTempNode) {
+							var t = parseInt(rw.temp, 10) || 0;
+							if (t > 0 && t < 150) {
+								wTempNode.innerText = '🌡️ ' + t + '°C';
+								wTempNode.style.background = getTempColor(t);
+								wTempNode.style.display = 'inline-block';
+							} else {
+								wTempNode.innerText = '🌡️ --°C';
+							}
+						}
+
+						if (wSsidNode && rw.ssid) {
+							wSsidNode.innerText = rw.ssid;
+						}
+
+						if (wChanNode) {
+							if (isDis) {
+								wChanNode.innerText = _('Disabled / معطل');
+							} else {
+								var chStr = rw.channel ? ('CH ' + rw.channel) : 'Auto';
+								if (rw.htmode) chStr += ' (' + rw.htmode + ')';
+								if (rw.clients !== undefined && rw.clients > 0) {
+									chStr += ' • ' + rw.clients + ' ' + _('clients');
+								}
+								wChanNode.innerText = chStr;
+							}
+						}
+
+						if (wBarNode) {
+							wBarNode.style.background = isDis ? '#cbd5e1' : '#10b981';
+						}
+
+						if (wBtnNode) {
+							wBtnNode.disabled = false;
+							wBtnNode.className = 'btn btn-sm ' + (isDis ? 'btn-primary' : 'btn-danger');
+							wBtnNode.innerText = isDis ? _('Turn On / تشغيل') : _('Turn Off / إيقاف');
+						}
+
+						if (wTxNode && rw.tx_bytes !== undefined) wTxNode.innerText = formatBytes(rw.tx_bytes);
+						if (wRxNode && rw.rx_bytes !== undefined) wRxNode.innerText = formatBytes(rw.rx_bytes);
+					}
+				}
+			}
+
+			function doLiveUpdate() {
+				return fetchStatus().then(function(res) {
+					applyLiveStatus(res);
+				}).catch(function(e) {
+					console.warn('km15 live update error:', e);
+				});
+			}
+
+			// Immediate non-blocking update (50ms after render)
+			window.setTimeout(doLiveUpdate, 50);
+
+			// Fast follow-up at 1.2s to compute initial CPU delta percentage
+			window.setTimeout(doLiveUpdate, 1200);
+
+			// Periodic live update every 3 seconds
+			poll.add(doLiveUpdate, 3);
+
+			return container;
 		} catch (err) {
 			console.error('Error rendering 29_ports:', err);
-			return cards.length ? E('div', {
-				'style': 'display:flex; flex-wrap:wrap; justify-content:center; gap:8px; margin-bottom:1.5em; align-items:stretch;'
-			}, cards) : E('div');
+			return container;
 		}
 	}
 });

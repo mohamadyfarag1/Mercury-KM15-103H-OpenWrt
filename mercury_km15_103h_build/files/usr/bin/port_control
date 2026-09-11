@@ -7,104 +7,140 @@
 STATE_DIR="/etc/horus/disabled_ports"
 mkdir -p "$STATE_DIR"
 
+get_cpu_temp() {
+    local val=""
+    if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
+        read -r val < /sys/class/thermal/thermal_zone0/temp 2>/dev/null
+    elif [ -f /sys/devices/virtual/thermal/thermal_zone0/temp ]; then
+        read -r val < /sys/devices/virtual/thermal/thermal_zone0/temp 2>/dev/null
+    fi
+
+    if [ -n "$val" ] && [ "$val" -gt 0 ]; then
+        if [ "$val" -ge 1000 ]; then
+            echo $(( val / 1000 ))
+            return 0
+        elif [ "$val" -lt 150 ]; then
+            echo "$val"
+            return 0
+        fi
+    fi
+
+    for h in /sys/class/hwmon/hwmon*; do
+        [ -d "$h" ] || continue
+        if [ -f "$h/name" ]; then
+            read -r hname < "$h/name" 2>/dev/null
+            case "$hname" in
+                *mt7621*|*soc*|*cpu*)
+                    if [ -f "$h/temp1_input" ]; then
+                        read -r val < "$h/temp1_input" 2>/dev/null
+                        if [ -n "$val" ] && [ "$val" -gt 0 ]; then
+                            [ "$val" -ge 1000 ] && echo $(( val / 1000 )) || echo "$val"
+                            return 0
+                        fi
+                    fi
+                    ;;
+            esac
+        fi
+    done
+
+    echo 0
+}
+
 get_wifi_temp() {
     local radio="$1"
     local phy="phy0"
     [ "$radio" = "radio1" ] && phy="phy1"
+    local val=""
 
-    # 1. Direct match on MediaTek mt7915_phy0 / mt7915_phy1 hwmon name
+    # 1. Direct match on MediaTek mt7915 hwmon per phy
     for h in /sys/class/hwmon/hwmon*; do
         [ -d "$h" ] || continue
-        hname=$(cat "$h/name" 2>/dev/null)
-        if [ "$hname" = "mt7915_${phy}" ] || [ "$hname" = "${phy}" ]; then
-            if [ -f "$h/temp1_input" ]; then
-                val=$(cat "$h/temp1_input" 2>/dev/null)
-                if [ -n "$val" ] && [ "$val" -gt 0 ]; then
-                    echo $(( val / 1000 ))
-                    return 0
+        if [ -f "$h/name" ]; then
+            read -r hname < "$h/name" 2>/dev/null
+            if [ "$hname" = "mt7915_${phy}" ] || [ "$hname" = "${phy}" ]; then
+                if [ -f "$h/temp1_input" ]; then
+                    read -r val < "$h/temp1_input" 2>/dev/null
+                    if [ -n "$val" ] && [ "$val" -gt 0 ]; then
+                        [ "$val" -ge 1000 ] && echo $(( val / 1000 )) || echo "$val"
+                        return 0
+                    fi
                 fi
             fi
         fi
     done
 
-    # 2. Match hwmon symlink target containing the phy name
-    for h in /sys/class/hwmon/hwmon*; do
-        [ -d "$h" ] || continue
-        target=$(readlink -f "$h" 2>/dev/null || readlink "$h" 2>/dev/null)
-        case "$target" in
-            *"$phy"*)
-                if [ -f "$h/temp1_input" ]; then
-                    val=$(cat "$h/temp1_input" 2>/dev/null)
-                    if [ -n "$val" ] && [ "$val" -gt 0 ]; then
-                        echo $(( val / 1000 ))
-                        return 0
-                    fi
-                fi
-                ;;
-        esac
-    done
-
-    # 3. Direct ieee80211 phy path
+    # 2. Direct ieee80211 phy path
     for p in "/sys/class/ieee80211/$phy/device/hwmon/hwmon"*/temp1_input \
              "/sys/class/ieee80211/$phy/hwmon/hwmon"*/temp1_input; do
         if [ -f "$p" ]; then
-            val=$(cat "$p" 2>/dev/null)
+            read -r val < "$p" 2>/dev/null
             if [ -n "$val" ] && [ "$val" -gt 0 ]; then
-                echo $(( val / 1000 ))
+                [ "$val" -ge 1000 ] && echo $(( val / 1000 )) || echo "$val"
                 return 0
             fi
         fi
     done
 
-    # 4. Search hwmon by driver/chipset name
+    # 3. Match shared MT7915 chip hwmon (MT7915 is dual-band on single PCIe)
+    # Check temp2_input for secondary radio if available, else temp1_input
     for h in /sys/class/hwmon/hwmon*; do
         [ -d "$h" ] || continue
-        hname=$(cat "$h/name" 2>/dev/null)
-        case "$hname" in
-            *mt7915*|*mt76*|*ath10k*|*qcom*|*wifi*)
-                if [ -f "$h/temp1_input" ]; then
-                    val=$(cat "$h/temp1_input" 2>/dev/null)
+        if [ -f "$h/name" ]; then
+            read -r hname < "$h/name" 2>/dev/null
+            case "$hname" in
+                *mt7915*|*mt76*)
+                    if [ "$radio" = "radio1" ] && [ -f "$h/temp2_input" ]; then
+                        read -r val < "$h/temp2_input" 2>/dev/null
+                    elif [ -f "$h/temp1_input" ]; then
+                        read -r val < "$h/temp1_input" 2>/dev/null
+                    fi
                     if [ -n "$val" ] && [ "$val" -gt 0 ]; then
-                        echo $(( val / 1000 ))
+                        [ "$val" -ge 1000 ] && echo $(( val / 1000 )) || echo "$val"
                         return 0
                     fi
-                fi
-                ;;
-        esac
+                    ;;
+            esac
+        fi
     done
 
-    # 5. Thermal zones
+    # 4. Wireless thermal zones (strictly excluding thermal_zone0 which is MT7621 CPU!)
     for tz in /sys/class/thermal/thermal_zone*; do
         [ -d "$tz" ] || continue
-        ttype=$(cat "$tz/type" 2>/dev/null)
-        case "$ttype" in
-            *$phy*|*mt7915*|*wifi*)
-                val=$(cat "$tz/temp" 2>/dev/null)
-                if [ -n "$val" ] && [ "$val" -gt 0 ]; then
-                    echo $(( val / 1000 ))
-                    return 0
-                fi
-                ;;
-        esac
-    done
-
-    # 6. Fallback to SoC thermal zone 0
-    if [ -f /sys/class/thermal/thermal_zone0/temp ]; then
-        val=$(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null)
-        if [ -n "$val" ] && [ "$val" -gt 0 ]; then
-            echo $(( val / 1000 ))
-            return 0
+        [ "$tz" = "/sys/class/thermal/thermal_zone0" ] && continue
+        if [ -f "$tz/type" ]; then
+            read -r ttype < "$tz/type" 2>/dev/null
+            case "$ttype" in
+                *$phy*|*mt7915*|*mt76*|*wifi*)
+                    read -r val < "$tz/temp" 2>/dev/null
+                    if [ -n "$val" ] && [ "$val" -gt 0 ]; then
+                        [ "$val" -ge 1000 ] && echo $(( val / 1000 )) || echo "$val"
+                        return 0
+                    fi
+                    ;;
+            esac
         fi
-    fi
+    done
 
     echo 0
 }
 
 port_status() {
-    # Print JSON status of all ethernet and wireless ports
-    echo "{"
-    echo '  "ports": {'
+    # 1. CPU stats
+    local cpu_stat=""
+    local cpu_load=""
+    read -r cpu_stat < /proc/stat 2>/dev/null
+    read -r cpu_load < /proc/loadavg 2>/dev/null
+    local cpu_temp
+    cpu_temp=$(get_cpu_temp)
 
+    # Print consolidated JSON
+    echo "{"
+    echo '  "cpu": {'
+    printf '    "temp": %d, "stat": "%s", "loadavg": "%s"\n' \
+        "$cpu_temp" "$cpu_stat" "$cpu_load"
+    echo '  },'
+
+    echo '  "ports": {'
     first=1
     for p in lan1 lan2 lan3 lan4 wan; do
         [ "$first" = "1" ] && first=0 || echo ","
@@ -116,22 +152,28 @@ port_status() {
         speed=0
         duplex=""
         operstate="down"
+        rx_bytes=0
+        tx_bytes=0
 
         if [ -d "/sys/class/net/$p" ]; then
-            operstate=$(cat "/sys/class/net/$p/operstate" 2>/dev/null || echo "down")
-            carrier=$(cat "/sys/class/net/$p/carrier" 2>/dev/null || echo 0)
+            [ -f "/sys/class/net/$p/operstate" ] && read -r operstate < "/sys/class/net/$p/operstate" 2>/dev/null
+            [ -f "/sys/class/net/$p/carrier" ] && read -r carrier < "/sys/class/net/$p/carrier" 2>/dev/null
             [ "$carrier" = "1" ] || carrier=0
             if [ "$carrier" = "1" ]; then
-                speed=$(cat "/sys/class/net/$p/speed" 2>/dev/null || echo 0)
-                duplex=$(cat "/sys/class/net/$p/duplex" 2>/dev/null || echo "")
+                [ -f "/sys/class/net/$p/speed" ] && read -r speed < "/sys/class/net/$p/speed" 2>/dev/null
+                [ -f "/sys/class/net/$p/duplex" ] && read -r duplex < "/sys/class/net/$p/duplex" 2>/dev/null
             else
                 speed=0
                 duplex=""
             fi
+            if [ -d "/sys/class/net/$p/statistics" ]; then
+                read -r rx_bytes < "/sys/class/net/$p/statistics/rx_bytes" 2>/dev/null || rx_bytes=0
+                read -r tx_bytes < "/sys/class/net/$p/statistics/tx_bytes" 2>/dev/null || tx_bytes=0
+            fi
         fi
 
-        printf '    "%s": {"disabled": %d, "carrier": %s, "speed": %s, "duplex": "%s", "operstate": "%s"}' \
-            "$p" "$is_disabled" "$carrier" "$speed" "$duplex" "$operstate"
+        printf '    "%s": {"disabled": %d, "carrier": %s, "speed": %s, "duplex": "%s", "operstate": "%s", "rx_bytes": %s, "tx_bytes": %s}' \
+            "$p" "$is_disabled" "$carrier" "${speed:-0}" "$duplex" "$operstate" "${rx_bytes:-0}" "${tx_bytes:-0}"
     done
     echo ""
     echo '  },'
@@ -151,35 +193,52 @@ port_status() {
         ssid=""
         mode="ap"
         clients=0
+        rx_bytes=0
+        tx_bytes=0
 
-        for ifc in $(uci show wireless 2>/dev/null | grep "=wifi-iface" | cut -d. -f2 | cut -d= -f1); do
-            dev=$(uci -q get "wireless.${ifc}.device")
-            if [ "$dev" = "$r" ]; then
-                ssid=$(uci -q get "wireless.${ifc}.ssid" || echo "")
-                mode=$(uci -q get "wireless.${ifc}.mode" || echo "ap")
-                iface_name=$(uci -q get "wireless.${ifc}.ifname" || echo "")
-                break
-            fi
-        done
+        # Try default iface name first
+        if [ -n "$(uci -q get "wireless.default_${r}")" ]; then
+            ssid=$(uci -q get "wireless.default_${r}.ssid" || echo "")
+            mode=$(uci -q get "wireless.default_${r}.mode" || echo "ap")
+            iface_name=$(uci -q get "wireless.default_${r}.ifname" || echo "")
+        fi
 
-        # If iface_name not set in UCI, check iw dev or fallback to standard name
+        if [ -z "$ssid" ]; then
+            for ifc in $(uci show wireless 2>/dev/null | grep "=wifi-iface" | cut -d. -f2 | cut -d= -f1); do
+                dev=$(uci -q get "wireless.${ifc}.device")
+                if [ "$dev" = "$r" ]; then
+                    ssid=$(uci -q get "wireless.${ifc}.ssid" || echo "")
+                    mode=$(uci -q get "wireless.${ifc}.mode" || echo "ap")
+                    iface_name=$(uci -q get "wireless.${ifc}.ifname" || echo "")
+                    break
+                fi
+            done
+        fi
+
         if [ -z "$iface_name" ]; then
             phy_idx=0
             [ "$r" = "radio1" ] && phy_idx=1
-            iface_name=$(iw dev 2>/dev/null | grep -A2 "phy#${phy_idx}" | grep Interface | awk '{print $2}' | head -n1)
-            [ -z "$iface_name" ] && iface_name="phy${phy_idx}-ap0"
+            iface_name="phy${phy_idx}-ap0"
         fi
 
-        # Count stations safely
+        # Count stations safely only if interface is up
         if [ -n "$iface_name" ] && [ -d "/sys/class/net/$iface_name" ]; then
-            clients=$(iw dev "$iface_name" station dump 2>/dev/null | grep -c "^Station")
-            clients=${clients:-0}
+            opstate=""
+            [ -f "/sys/class/net/$iface_name/operstate" ] && read -r opstate < "/sys/class/net/$iface_name/operstate" 2>/dev/null
+            if [ "$opstate" = "up" ]; then
+                clients=$(iw dev "$iface_name" station dump 2>/dev/null | grep -c "^Station")
+                clients=${clients:-0}
+            fi
+            if [ -d "/sys/class/net/$iface_name/statistics" ]; then
+                read -r rx_bytes < "/sys/class/net/$iface_name/statistics/rx_bytes" 2>/dev/null || rx_bytes=0
+                read -r tx_bytes < "/sys/class/net/$iface_name/statistics/tx_bytes" 2>/dev/null || tx_bytes=0
+            fi
         fi
 
         r_temp=$(get_wifi_temp "$r")
 
-        printf '    "%s": {"disabled": %s, "channel": "%s", "htmode": "%s", "ssid": "%s", "mode": "%s", "ifname": "%s", "clients": %d, "temp": %d}' \
-            "$r" "$r_disabled" "$r_channel" "$r_htmode" "$ssid" "$mode" "$iface_name" "$clients" "$r_temp"
+        printf '    "%s": {"disabled": %s, "channel": "%s", "htmode": "%s", "ssid": "%s", "mode": "%s", "ifname": "%s", "clients": %d, "temp": %d, "rx_bytes": %s, "tx_bytes": %s}' \
+            "$r" "$r_disabled" "$r_channel" "$r_htmode" "$ssid" "$mode" "$iface_name" "$clients" "$r_temp" "${rx_bytes:-0}" "${tx_bytes:-0}"
     done
     echo ""
     echo '  }'
