@@ -32,6 +32,9 @@ jobs:
   build:
     name: Build OpenWrt for Mercury KM15-103H
     runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+      actions: write
 
     steps:
       - name: Checkout Repository
@@ -147,19 +150,6 @@ jobs:
             echo "Then run \`mercury-wifi-check\` over SSH to confirm the MT7915 radios came up."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Emergency Backup Upload to Transfer.sh (Bypass GitHub Storage Limit)
-        if: success()
-        run: |
-          echo "## Backup Download Links (transfer.sh)" >> "$GITHUB_STEP_SUMMARY"
-          echo "In case the GitHub Artifact upload fails due to 403 Storage Quota Exceeded, use these links:" >> "$GITHUB_STEP_SUMMARY"
-          for f in openwrt/bin/targets/ramips/mt7621/*mercury_km15-103h*sysupgrade.bin; do
-            [ -f "$f" ] || continue
-            FILENAME=$(basename "$f")
-            URL=$(curl -s -T "$f" "https://transfer.sh/$FILENAME")
-            echo "- **Firmware**: [$FILENAME]($URL)" >> "$GITHUB_STEP_SUMMARY"
-            echo "Uploaded backup to $URL"
-          done
-
       - name: Upload Flashable Firmware Artifact
         if: success()
         continue-on-error: true
@@ -171,7 +161,7 @@ jobs:
             openwrt/bin/targets/ramips/mt7621/*.manifest
             openwrt/bin/targets/ramips/mt7621/sha256sums
           if-no-files-found: warn
-          retention-days: 2
+          retention-days: 7
           compression-level: 9
 
       # Recovery artifact: *-initramfs-uImage.itb + instructions.
@@ -188,7 +178,22 @@ jobs:
           name: Mercury_KM15-103H_UART_Recovery
           path: recovery_files/
           if-no-files-found: warn
-          retention-days: 2
+          retention-days: 7
+
+      # Create an official GitHub Release with direct permanent download links
+      - name: Publish Firmware to GitHub Releases
+        if: success()
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="firmware-${{ github.run_number }}"
+          gh release create "$TAG" \
+            openwrt/bin/targets/ramips/mt7621/*mercury_km15-103h*.bin \
+            openwrt/bin/targets/ramips/mt7621/*.manifest \
+            openwrt/bin/targets/ramips/mt7621/sha256sums \
+            --title "Mercury KM15-103H Firmware (Build #${{ github.run_number }})" \
+            --notes "Flashable OpenWrt 24.10 firmware for Mercury KM15-103H with 160MHz support, Superchannels, and Horus Client." || true
 
       # A failed build still leaves partial images on disk. Ship only the
       # build log so that a rejected image can never accidentally be flashed.
