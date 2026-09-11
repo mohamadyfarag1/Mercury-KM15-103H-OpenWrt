@@ -147,8 +147,22 @@ jobs:
             echo "Then run \`mercury-wifi-check\` over SSH to confirm the MT7915 radios came up."
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: Emergency Backup Upload to Transfer.sh (Bypass GitHub Storage Limit)
+        if: success()
+        run: |
+          echo "## Backup Download Links (transfer.sh)" >> "$GITHUB_STEP_SUMMARY"
+          echo "In case the GitHub Artifact upload fails due to 403 Storage Quota Exceeded, use these links:" >> "$GITHUB_STEP_SUMMARY"
+          for f in openwrt/bin/targets/ramips/mt7621/*mercury_km15-103h*sysupgrade.bin; do
+            [ -f "$f" ] || continue
+            FILENAME=$(basename "$f")
+            URL=$(curl -s -T "$f" "https://transfer.sh/$FILENAME")
+            echo "- **Firmware**: [$FILENAME]($URL)" >> "$GITHUB_STEP_SUMMARY"
+            echo "Uploaded backup to $URL"
+          done
+
       - name: Upload Flashable Firmware Artifact
         if: success()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: Mercury_KM15-103H_Firmware
@@ -157,6 +171,8 @@ jobs:
             openwrt/bin/targets/ramips/mt7621/*.manifest
             openwrt/bin/targets/ramips/mt7621/sha256sums
           if-no-files-found: warn
+          retention-days: 2
+          compression-level: 9
 
       # Recovery artifact: *-initramfs-uImage.itb + instructions.
       # A FIT image U-Boot can 'bootm' straight into RAM, same idea as the
@@ -166,16 +182,19 @@ jobs:
       # Use when: first install, device bricked, or flashing from a clean NAND.
       - name: Upload UART Recovery Files (initramfs + instructions)
         if: success()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: Mercury_KM15-103H_UART_Recovery
           path: recovery_files/
           if-no-files-found: warn
+          retention-days: 2
 
       # A failed build still leaves partial images on disk. Ship only the
       # build log so that a rejected image can never accidentally be flashed.
       - name: Upload build log only (build or verification failed)
         if: failure()
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: FAILED-BUILD-LOG-DO-NOT-FLASH
@@ -183,3 +202,4 @@ jobs:
             openwrt/build.log
             openwrt/logs/
           if-no-files-found: warn
+          retention-days: 2
