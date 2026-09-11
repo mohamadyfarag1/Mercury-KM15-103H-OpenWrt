@@ -430,6 +430,37 @@ if ! grep -q '^CONFIG_TARGET_ROOTFS_INITRAMFS=y' .config; then
 	echo "⚠️  WARNING: TARGET_ROOTFS_INITRAMFS was dropped - no *-initramfs-uImage.itb"
 	echo "    will be produced, so the UART Ymodem 'boot OpenWrt from RAM' recovery"
 	echo "    path is unavailable and the only install route is sysupgrade."
+# ===============================================================
+# Apply 3D Glassy Glowing Horus UI Enhancements to Bootstrap Theme
+# ===============================================================
+THEME_CSS="feeds/luci/themes/luci-theme-bootstrap/htdocs/luci-static/bootstrap/cascade.css"
+if [ -f "$THEME_CSS" ]; then
+	echo "Applying Horus 3D Glassy Glow CSS to Bootstrap theme..."
+	cat << 'EOF' >> "$THEME_CSS"
+
+/* === HORUS LOGO 3D ENHANCEMENTS === */
+header .brand {
+    /* Make the logo noticeably larger */
+    background-size: contain !important;
+    background-position: 20px center !important;
+    padding-left: 95px !important;
+    
+    /* Global glow and 3D effects for both text and logo */
+    filter: drop-shadow(0px 3px 5px rgba(0,0,0,0.6)) drop-shadow(0px 0px 10px rgba(0, 238, 255, 0.6));
+    transition: all 0.3s ease-in-out;
+    
+    /* Text styling: subtle internal shadow to pop */
+    text-shadow: 1px 1px 0 rgba(0,0,0,0.5), 0px 0px 10px rgba(255,255,255,0.4) !important;
+    font-size: 22px !important;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+}
+
+header .brand:hover {
+    filter: drop-shadow(0px 5px 8px rgba(0,0,0,0.7)) drop-shadow(0px 0px 18px rgba(0, 255, 255, 0.9));
+    transform: translateY(-1px);
+}
+EOF
 fi
  
 echo "✅ Configuration complete."
