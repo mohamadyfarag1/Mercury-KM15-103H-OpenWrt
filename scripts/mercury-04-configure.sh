@@ -430,6 +430,8 @@ if ! grep -q '^CONFIG_TARGET_ROOTFS_INITRAMFS=y' .config; then
 	echo "⚠️  WARNING: TARGET_ROOTFS_INITRAMFS was dropped - no *-initramfs-uImage.itb"
 	echo "    will be produced, so the UART Ymodem 'boot OpenWrt from RAM' recovery"
 	echo "    path is unavailable and the only install route is sysupgrade."
+fi
+
 # ===============================================================
 # Apply 3D Glassy Glowing Horus UI Enhancements to Bootstrap Theme
 # ===============================================================
