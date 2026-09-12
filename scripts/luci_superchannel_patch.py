@@ -27,7 +27,7 @@ injection = """
                 for (var i = 0; i < horus_5g_plan.length; i++) {
                     var ch = horus_5g_plan[i][0];
                     var mhz = horus_5g_plan[i][1];
-                    new_5g.push(mhz, mhz + ' MHz (Ch ' + ch + ')', {available: true});
+                    new_5g.push(ch, mhz + ' MHz (Ch ' + ch + ')', {available: true});
                 }
                 this.channels['5g'] = new_5g;
             }
@@ -43,7 +43,7 @@ if "/* === HORUS SUPERCHANNEL" not in js_code:
 
 # Fix the case where iwinfo natively provides the channel.
 js_code = re.sub(r"o\.value\(c\.channel,\s*'%h MHz \(Ch %h\)'\.format\(c\.mhz,\s*c\.channel\)\);", 
-                 r"o.value(c.mhz, '%h MHz (Ch %h)'.format(c.mhz, c.channel));", js_code)
+                 r"o.value(c.channel, '%h MHz (Ch %h)'.format(c.mhz, c.channel));", js_code)
 
 with open(luci_wireless_path, "w", encoding="utf-8") as f:
     f.write(js_code)
