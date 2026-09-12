@@ -521,11 +521,17 @@ cat << 'EOF' > openwrt/files/etc/uci-defaults/99-horus-wifi
 #!/bin/sh
 # Set 5GHz radio to AX, 80MHz, Channel 36, and SSID HORUS-AX
 
+# Force generate wireless config if it doesn't exist
+if [ ! -f /etc/config/wireless ]; then
+    /sbin/wifi config
+fi
+
 for radio in $(uci show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d= -f1); do
     band=$(uci -q get wireless.${radio}.band)
     if [ "$band" = "5g" ] || [ "$band" = "5G" ]; then
         uci set wireless.${radio}.channel='36'
         uci set wireless.${radio}.cell_density='0'
+        uci set wireless.${radio}.hwmode='11ax'
         uci set wireless.${radio}.htmode='HE80'
         uci set wireless.${radio}.disabled='0'
         uci set wireless.${radio}.country='US'
