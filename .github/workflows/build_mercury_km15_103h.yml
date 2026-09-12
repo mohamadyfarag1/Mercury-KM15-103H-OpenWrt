@@ -112,7 +112,7 @@ jobs:
       - name: Apply Universal Superchannel Fixes
         run: |
           bash scripts/mercury-07-luci-superchannel.sh
-          bash scripts/mercury-08-kernel-regdom.sh
+          
 
       - name: Apply MT7915 Driver Channels
         run: bash scripts/mercury-09-mt76-channels.sh
