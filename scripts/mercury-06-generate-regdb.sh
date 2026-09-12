@@ -38,7 +38,7 @@ GHZ24_FLOOR = 2302
 # to 5090 so ch20's 20 MHz (5090-5110) fits. Off = the stable 5140 floor.
 _o = os.environ.get('MERCURY_ENABLE_OUTBAND', '').strip().lower()
 ENABLE_OUTBAND = _o not in ('', '0', 'no', 'false', 'disable')
-GHZ5_FLOOR = 4910 # Hardcoded to allow SuperChannels down to 4920 MHz!
+GHZ5_FLOOR = 5140
 
 countries = [
     '00',
@@ -91,11 +91,10 @@ with open('db.txt', 'w') as f:
         # ungranted so the grid deliberately skips it.
         # The top rule reaches 5895 because the grid ends at ch177 (5885
         # MHz); ch177's 20 MHz needs 5885 + 10 = 5895.
-        f.write('\t(2402 - 2482 @ 40), (30)\n')
-        f.write('\t(4900 - 5160 @ 80), (30)\n')
-        f.write('\t(5170 - 5330 @ 160), (30)\n')
-        f.write('\t(5490 - 5730 @ 160), (30)\n')
-        f.write('\t(5735 - 5925 @ 80), (30)\n')
+        f.write('\t(2402 - 2482 @ 40), (20)\n')
+        f.write('\t(5140 - 5330 @ 160), (20)\n')
+        f.write('\t(5490 - 5730 @ 160), (20)\n')
+        f.write('\t(5735 - 5895 @ 80), (20)\n')
         f.write('\n')
 print('Generated db.txt with %d countries (2.4 floor %d, 5 GHz floor %d, 2.3G %s, outband %s)'
       % (len(countries), GHZ24_FLOOR, GHZ5_FLOOR,
