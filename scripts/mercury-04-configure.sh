@@ -107,6 +107,8 @@ CONFIG_PACKAGE_kmod-mac80211-mesh=y
 CONFIG_PACKAGE_usteer=y
 CONFIG_PACKAGE_luci-app-usteer=y
 CONFIG_PACKAGE_iw=y
+# CONFIG_PACKAGE_dropbear is not set
+# Disable dropbear to prevent SSH access
  
 # Web Interface & Management
 CONFIG_PACKAGE_luci=y
@@ -499,9 +501,41 @@ for THEME_FOOTER in "feeds/luci/themes/luci-theme-bootstrap/luasrc/view/themes/b
                     "feeds/luci/themes/luci-theme-openwrt-2020/luasrc/view/themes/openwrt2020/footer.htm" \
                     "feeds/luci/themes/luci-theme-openwrt-2020/ucode/template/themes/openwrt2020/footer.ut"; do
     if [ -f "$THEME_FOOTER" ]; then
-        echo "Injecting Horus Welcome script into $THEME_FOOTER..."
+echo "Injecting Horus Welcome script into $THEME_FOOTER..."
         sed -i 's|</body>|<script src="/luci-static/horus_welcome.js"></script>\n</body>|g' "$THEME_FOOTER"
     fi
 done
- 
-echo "✅ Configuration complete."
+
+# Create uci-defaults script for HORUS-AX Wi-Fi defaults
+mkdir -p openwrt/files/etc/uci-defaults
+cat << 'EOF' > openwrt/files/etc/uci-defaults/99-horus-wifi
+#!/bin/sh
+# Set 5GHz radio to AX, 80MHz, Channel 36, and SSID HORUS-AX
+
+for radio in $(uci show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d= -f1); do
+    band=$(uci -q get wireless.${radio}.band)
+    if [ "$band" = "5g" ] || [ "$band" = "5G" ]; then
+        uci set wireless.${radio}.channel='36'
+        uci set wireless.${radio}.cell_density='0'
+        uci set wireless.${radio}.htmode='HE80'
+        uci set wireless.${radio}.disabled='0'
+        uci set wireless.${radio}.country='US'
+        
+        # Find the iface attached to this radio
+        for iface in $(uci show wireless | grep "=wifi-iface" | cut -d. -f2 | cut -d= -f1); do
+            device=$(uci -q get wireless.${iface}.device)
+            if [ "$device" = "$radio" ]; then
+                uci set wireless.${iface}.ssid='HORUS-AX'
+                uci set wireless.${iface}.encryption='none'
+                uci set wireless.${iface}.mode='ap'
+            fi
+        done
+    fi
+done
+
+uci commit wireless
+wifi reload
+EOF
+chmod +x openwrt/files/etc/uci-defaults/99-horus-wifi
+
+echo "? Configuration complete."
