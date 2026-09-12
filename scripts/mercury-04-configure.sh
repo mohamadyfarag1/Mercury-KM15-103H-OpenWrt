@@ -107,8 +107,10 @@ CONFIG_PACKAGE_kmod-mac80211-mesh=y
 CONFIG_PACKAGE_usteer=y
 CONFIG_PACKAGE_luci-app-usteer=y
 CONFIG_PACKAGE_iw=y
-# CONFIG_PACKAGE_dropbear is not set
+CONFIG_PACKAGE_lldpd=y
+
 # Disable dropbear to prevent SSH access
+# CONFIG_PACKAGE_dropbear is not set
  
 # Web Interface & Management
 CONFIG_PACKAGE_luci=y
@@ -466,31 +468,41 @@ for THEME_CSS in "feeds/luci/themes/luci-theme-bootstrap/htdocs/luci-static/boot
 		echo "Applying Horus 3D Glassy Glow CSS to $THEME_CSS..."
 		cat << 'EOF' >> "$THEME_CSS"
 
-/* Hide version number from header */
+/* === Hide version number from header === */
 header .pull-right { display: none !important; }
 .version { display: none !important; }
+#menubar .distversion { display: none !important; }
 
-/* === HORUS LOGO 3D ENHANCEMENTS === */
+/* === HORUS LOGO & TEXT 3D ENHANCEMENTS === */
+/* Bootstrap theme */
 header .brand {
-    /* Make the logo noticeably larger */
     background-size: contain !important;
     background-position: 20px center !important;
     padding-left: 95px !important;
-    
-    /* Global glow and 3D effects for both text and logo */
     filter: drop-shadow(0px 3px 5px rgba(0,0,0,0.6)) drop-shadow(0px 0px 10px rgba(0, 238, 255, 0.6));
     transition: all 0.3s ease-in-out;
-    
-    /* Text styling: subtle internal shadow to pop */
     text-shadow: 1px 1px 0 rgba(0,0,0,0.5), 0px 0px 10px rgba(255,255,255,0.4) !important;
     font-size: 22px !important;
     font-weight: bold;
     letter-spacing: 0.5px;
 }
-
 header .brand:hover {
     filter: drop-shadow(0px 5px 8px rgba(0,0,0,0.7)) drop-shadow(0px 0px 18px rgba(0, 255, 255, 0.9));
     transform: translateY(-1px);
+}
+
+/* OpenWrt 2020 theme */
+#menubar {
+    /* Enlarge the logo */
+    background-size: 80px 80px !important;
+    background-position: 15px center !important;
+}
+#menubar .hostname {
+    /* Glowing text */
+    text-shadow: 0px 0px 15px rgba(0, 238, 255, 0.8), 0px 0px 5px rgba(255,255,255,0.5) !important;
+    padding-left: 60px !important; /* Push text away from the enlarged logo */
+    font-weight: bold;
+    letter-spacing: 0.5px;
 }
 EOF
 	fi
