@@ -1,7 +1,7 @@
 include $(TOPDIR)/rules.mk
 
 PKG_NAME:=luci-app-horus-client
-PKG_VERSION:=1.2.190
+PKG_VERSION:=1.2.191
 PKG_RELEASE:=1
 
 include $(INCLUDE_DIR)/package.mk
