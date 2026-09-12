@@ -109,9 +109,6 @@ CONFIG_PACKAGE_luci-app-usteer=y
 CONFIG_PACKAGE_iw=y
 CONFIG_PACKAGE_lldpd=y
 
-# Disable dropbear to prevent SSH access
-# CONFIG_PACKAGE_dropbear is not set
- 
 # Web Interface & Management
 CONFIG_PACKAGE_luci=y
 CONFIG_PACKAGE_luci-ssl=y
