@@ -109,6 +109,9 @@ jobs:
           MERCURY_ENABLE_23GHZ: ${{ inputs.enable_23ghz && '1' || '' }}
         run: bash scripts/mercury-04-configure.sh
 
+      - name: Apply MT76 Enhancements
+        run: bash scripts/mercury-09-mt76-enhancements.sh
+
 
 
       - name: Download Build Dependencies
