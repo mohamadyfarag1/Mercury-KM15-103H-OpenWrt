@@ -27,18 +27,9 @@ mkdir -p openwrt/package/kernel/mt76/patches
 cat << 'EOF' > openwrt/package/kernel/mt76/patches/995-mt7915-power-30dbm.patch
 --- a/mt7915/init.c
 +++ b/mt7915/init.c
-@@ -319,7 +319,7 @@
- 	int pwr_delta = mt7915_eeprom_get_power_delta(dev, sband->band);
- 	struct mt76_power_limits limits;
- 
--	phy->sku_limit_en = true;
-+	phy->sku_limit_en = false;
- 	phy->sku_path_en = true;
- 	for (i = 0; i < sband->n_channels; i++) {
- 		struct ieee80211_channel *chan = &sband->channels[i];
-@@ -344,9 +344,8 @@
- 
- 		target_power += path_delta;
+@@ -307,9 +307,8 @@
+ 							  target_power);
+ 		target_power += nss_delta;
  		target_power = DIV_ROUND_UP(target_power, 2);
 -		chan->max_power = min_t(int, chan->max_reg_power,
 -					target_power);

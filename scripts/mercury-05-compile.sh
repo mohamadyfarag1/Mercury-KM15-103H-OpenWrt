@@ -303,11 +303,12 @@ echo "=== ccache initial stats ==="
 ccache -s 2>/dev/null || true
 
 make -j"$(nproc)" 2>&1 | tee build.log
+BUILD_STATUS=${PIPESTATUS[0]}
 
 echo "=== ccache completion stats ==="
 ccache -s 2>/dev/null || true
 
-if [ "${PIPESTATUS[0]}" -ne 0 ]; then
+if [ "$BUILD_STATUS" -ne 0 ]; then
     echo "======================================="
     echo "BUILD FAILED - real compiler output follows"
     echo "======================================="
