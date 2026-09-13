@@ -4,7 +4,7 @@
 # =============================================
 # Runs from the repository root. Clones wireless-regdb, generates
 # a db.txt that gives every country the STANDARD 2.4/5 GHz channel
-# plan at 30 dBm with no DFS flag and no NO_IR, signs it, and drops
+# plan at 27 dBm with no DFS flag and no NO_IR, signs it, and drops
 # the resulting regulatory.db into openwrt/files/ so OpenWrt bundles
 # it into the squashfs instead of the stock restricted one.
 #
@@ -91,8 +91,8 @@ with open('db.txt', 'w') as f:
         # ungranted so the grid deliberately skips it.
         # The top rule reaches 5895 because the grid ends at ch177 (5885
         # MHz); ch177's 20 MHz needs 5885 + 10 = 5895.
-        f.write('\t(2402 - 2482 @ 40), (30)\n')
-        f.write('\t(4990 - 6005 @ 80), (30)\n')
+        f.write('\t(2402 - 2482 @ 40), (27)\n')
+        f.write('\t(4990 - 6005 @ 80), (27)\n')
         f.write('\n')
 print('Generated db.txt with %d countries (2.4 floor %d, 5 GHz floor %d, 2.3G %s, outband %s)'
       % (len(countries), GHZ24_FLOOR, GHZ5_FLOOR,

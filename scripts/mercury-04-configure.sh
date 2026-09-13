@@ -637,7 +637,7 @@ cat << 'EOF' > openwrt/files/etc/uci-defaults/99-horus-wifi
             uci set wireless.${radio}.htmode='HE80'
             uci set wireless.${radio}.disabled='0'
             uci set wireless.${radio}.country='US'
-            uci set wireless.${radio}.txpower='30'
+            uci set wireless.${radio}.txpower='27'
             
             # Find the iface attached to this radio
             for iface in $(uci show wireless | grep "=wifi-iface" | cut -d. -f2 | cut -d= -f1); do
