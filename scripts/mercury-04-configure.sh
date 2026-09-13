@@ -656,9 +656,6 @@ cat << 'EOF' > openwrt/files/etc/uci-defaults/99-horus-wifi
 exit 0
 EOF
 
-uci commit wireless
-wifi reload
-EOF
 chmod +x openwrt/files/etc/uci-defaults/99-horus-wifi
 
 echo "? Configuration complete."
