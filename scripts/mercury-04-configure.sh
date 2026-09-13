@@ -96,6 +96,8 @@ CONFIG_CCACHE_DIR="/home/runner/.cache/ccache"
  
 # Wireless Drivers & Firmware
 CONFIG_PACKAGE_kmod-mt7915e=y
+CONFIG_PACKAGE_kmod-hwmon-core=y
+CONFIG_PACKAGE_kmod-thermal=y
 CONFIG_PACKAGE_kmod-mt7915-firmware=y
 CONFIG_PACKAGE_kmod-mt76=y
 CONFIG_PACKAGE_kmod-mt76-connac=y
@@ -501,6 +503,10 @@ header .brand:hover {
     font-weight: bold;
     letter-spacing: 0.5px;
 }
+
+/* === HIDE UNREALISTIC CPU CARD (Zero CPU Overhead) === */
+/* Targets the CPU dashboard widget that appears when thermal zones are active */
+.node-system-board, div[data-title="CPU"], div[data-title="المعالج"], .box.cpu { display: none !important; }
 EOF
 	fi
 done
@@ -583,8 +589,23 @@ chmod +x openwrt/files/etc/uci-defaults/98-horus-welcome
 # Speed up LAN bridge initialization by ignoring Wi-Fi delays
 cat << 'EOF' > openwrt/files/etc/uci-defaults/99-horus-network
 #!/bin/sh
+# Fix for DSA (Distributed Switch Architecture) OpenWrt >= 21.02
+# Find the bridge device (usually br-lan) and force it up, also disable STP 
+# to prevent 30-second port learning delays.
+i=0
+while uci -q get network.@device[$i]; do
+    if [ "$(uci -q get network.@device[$i].name)" = "br-lan" ]; then
+        uci -q set network.@device[$i].force_link='1'
+        uci -q set network.@device[$i].empty='1'
+        uci -q set network.@device[$i].stp='0'
+        uci -q set network.@device[$i].ipv6='0'
+        break
+    fi
+    i=$((i+1))
+done
+uci -q set network.lan.ipv6='0'
+uci -q set network.lan.stp='0'
 uci -q set network.lan.force_link='1'
-uci -q set network.lan.empty_bridge='1'
 uci commit network
 exit 0
 EOF
@@ -594,35 +615,46 @@ chmod +x openwrt/files/etc/uci-defaults/99-horus-network
 mkdir -p openwrt/files/etc/uci-defaults
 cat << 'EOF' > openwrt/files/etc/uci-defaults/99-horus-wifi
 #!/bin/sh
-# Set 5GHz radio to AX, 80MHz, Channel 36, and SSID HORUS-AX
+# Set 5GHz radio to AX, 80MHz, Channel 36, and SSID HORUS-AX-5G
 
-# Force generate wireless config if it doesn't exist
-if [ ! -f /etc/config/wireless ]; then
-    /sbin/wifi config
-fi
+# Run in background so mt76 probing doesn't block network startup!
+(
+    # Wait until wireless device is detected and config is populated
+    tries=0
+    while [ ! -f /etc/config/wireless ] || ! grep -q "=wifi-device" /etc/config/wireless; do
+        sleep 2
+        /sbin/wifi config
+        tries=$((tries+1))
+        if [ $tries -ge 15 ]; then break; fi
+    done
 
-for radio in $(uci show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d= -f1); do
-    band=$(uci -q get wireless.${radio}.band)
-    if [ "$band" = "5g" ] || [ "$band" = "5G" ]; then
-        uci set wireless.${radio}.channel='36'
-        uci set wireless.${radio}.cell_density='0'
-        uci set wireless.${radio}.hwmode='11ax'
-        uci set wireless.${radio}.htmode='HE80'
-        uci set wireless.${radio}.disabled='0'
-        uci set wireless.${radio}.country='US'
-        uci set wireless.${radio}.txpower='30'
-        
-        # Find the iface attached to this radio
-        for iface in $(uci show wireless | grep "=wifi-iface" | cut -d. -f2 | cut -d= -f1); do
-            device=$(uci -q get wireless.${iface}.device)
-            if [ "$device" = "$radio" ]; then
-                uci set wireless.${iface}.ssid='HORUS-AX'
-                uci set wireless.${iface}.encryption='none'
-                uci set wireless.${iface}.mode='ap'
-            fi
-        done
-    fi
-done
+    for radio in $(uci show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d= -f1); do
+        band=$(uci -q get wireless.${radio}.band)
+        if [ "$band" = "5g" ] || [ "$band" = "5G" ] || [ "$band" = "5a" ]; then
+            uci set wireless.${radio}.channel='36'
+            uci set wireless.${radio}.cell_density='0'
+            uci set wireless.${radio}.hwmode='11a'
+            uci set wireless.${radio}.htmode='HE80'
+            uci set wireless.${radio}.disabled='0'
+            uci set wireless.${radio}.country='US'
+            uci set wireless.${radio}.txpower='30'
+            
+            # Find the iface attached to this radio
+            for iface in $(uci show wireless | grep "=wifi-iface" | cut -d. -f2 | cut -d= -f1); do
+                device=$(uci -q get wireless.${iface}.device)
+                if [ "$device" = "$radio" ]; then
+                    uci set wireless.${iface}.ssid='HORUS-AX-5G'
+                    uci set wireless.${iface}.encryption='none'
+                    uci set wireless.${iface}.mode='ap'
+                fi
+            done
+        fi
+    done
+    uci commit wireless
+    wifi reload
+) &
+exit 0
+EOF
 
 uci commit wireless
 wifi reload
