@@ -10,7 +10,7 @@ echo ">>> Creating mt76 channels patch..."
 cat << 'EOF' > "$MT76_PATCH"
 --- a/mac80211.c
 +++ b/mac80211.c
-@@ -512,6 +512,62 @@
+@@ -44,5 +44,61 @@
  	CHAN2G(14, 2484),
  };
  
