@@ -76,15 +76,11 @@ make package/kernel/mt76/prepare V=s -j"$(nproc)"   2>&1 || true
 echo "======================================="
 echo "Step 3: Removing superchannel and HE160-DBDC driver patches..."
 echo "======================================="
-# rm -fv package/kernel/mt76/patches/999-mercury-superchannels.patch \
-#        package/kernel/mt76/patches/998-mt7915-he160-dbdc.patch 2>/dev/null || true
-# for STALE in 999-mercury-superchannels 998-mt7915-he160-dbdc; do
-#     if [ -e "package/kernel/mt76/patches/$STALE.patch" ]; then
-#         echo "!!!! package/kernel/mt76/patches/$STALE.patch still present after removal."
-#         exit 1
-#     fi
-# done
-echo "OK: Retaining 160MHz and superchannel patches."
+rm -fv package/kernel/mt76/patches/*superchannel* \
+       package/kernel/mt76/patches/999-mercury-superchannels.patch \
+       package/kernel/mt76/patches/998-mt7915-he160-dbdc.patch 2>/dev/null || true
+echo "OK: Stable standard channel plan and HE80 operation enforced."
+
 
 
 # ---------------------------------------------------------------
@@ -795,8 +791,7 @@ if [ -n "$GITHUB_STEP_SUMMARY" ]; then
         echo "Flash \`*-squashfs-sysupgrade.bin\` **without** \"Keep settings\","
         echo "then run \`mercury-wifi-check\` over SSH to confirm the radios came up."
         echo
-        echo "5 GHz is configured for HE160 (1x1 NSS) on standard channels (36-64)."
-        echo "Superchannels (169-177, 4.9GHz) are unlocked for HE80/HE40/HE20 operation."
-        echo "Built-in world domain widened to 4910-6120 MHz, so country 00 gives full power."
+        echo "5 GHz is configured for stable HE80 (AX) operation on standard channels (36-64)."
+        echo "MT7915 driver unlocked for 30 dBm maximum Tx-Power with latest firmware."
     } >> "$GITHUB_STEP_SUMMARY"
 fi

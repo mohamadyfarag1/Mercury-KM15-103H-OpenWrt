@@ -610,6 +610,7 @@ for radio in $(uci show wireless | grep '=wifi-device' | cut -d. -f2 | cut -d= -
         uci set wireless.${radio}.htmode='HE80'
         uci set wireless.${radio}.disabled='0'
         uci set wireless.${radio}.country='US'
+        uci set wireless.${radio}.txpower='30'
         
         # Find the iface attached to this radio
         for iface in $(uci show wireless | grep "=wifi-iface" | cut -d. -f2 | cut -d= -f1); do
