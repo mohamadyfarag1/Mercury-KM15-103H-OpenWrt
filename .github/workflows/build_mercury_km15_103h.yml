@@ -109,13 +109,6 @@ jobs:
           MERCURY_ENABLE_23GHZ: ${{ inputs.enable_23ghz && '1' || '' }}
         run: bash scripts/mercury-04-configure.sh
 
-      - name: Apply Universal Superchannel Fixes
-        run: |
-          bash scripts/mercury-07-luci-superchannel.sh
-          
-
-      - name: Apply MT7915 Driver Channels
-        run: bash scripts/mercury-09-mt76-channels.sh
 
 
       - name: Download Build Dependencies
@@ -202,7 +195,7 @@ jobs:
             openwrt/bin/targets/ramips/mt7621/*.manifest \
             openwrt/bin/targets/ramips/mt7621/sha256sums \
             --title "Mercury KM15-103H Firmware (Build #${{ github.run_number }})" \
-            --notes "Flashable OpenWrt 24.10 firmware for Mercury KM15-103H with 160MHz support, Superchannels, and Horus Client." || true
+            --notes "Flashable OpenWrt 24.10 firmware for Mercury KM15-103H with Horus Client." || true
 
       # A failed build still leaves partial images on disk. Ship only the
       # build log so that a rejected image can never accidentally be flashed.
