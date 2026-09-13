@@ -580,6 +580,16 @@ EOF
 chmod +x openwrt/files/etc/uci-defaults/98-horus-welcome
 
 
+# Speed up LAN bridge initialization by ignoring Wi-Fi delays
+cat << 'EOF' > openwrt/files/etc/uci-defaults/99-horus-network
+#!/bin/sh
+uci -q set network.lan.force_link='1'
+uci -q set network.lan.empty_bridge='1'
+uci commit network
+exit 0
+EOF
+chmod +x openwrt/files/etc/uci-defaults/99-horus-network
+
 # Create uci-defaults script for HORUS-AX Wi-Fi defaults
 mkdir -p openwrt/files/etc/uci-defaults
 cat << 'EOF' > openwrt/files/etc/uci-defaults/99-horus-wifi
