@@ -568,15 +568,17 @@ cat << 'EOF' > openwrt/files/www/luci-static/horus_welcome.js
 })();
 EOF
 
-# Inject welcome script into Theme footers
-for THEME_FOOTER in "feeds/luci/themes/luci-theme-bootstrap/luasrc/view/themes/bootstrap/footer.htm" \
-                    "feeds/luci/themes/luci-theme-openwrt-2020/luasrc/view/themes/openwrt2020/footer.htm" \
-                    "feeds/luci/themes/luci-theme-openwrt-2020/ucode/template/themes/openwrt2020/footer.ut"; do
-    if [ -f "$THEME_FOOTER" ]; then
-echo "Injecting Horus Welcome script into $THEME_FOOTER..."
-        sed -i 's|</body>|<script src="/luci-static/horus_welcome.js"></script>\n</body>|g' "$THEME_FOOTER"
-    fi
-done
+# Create a uci-defaults script to safely inject the welcome script into the global luci.js
+mkdir -p openwrt/files/etc/uci-defaults/
+cat << 'EOF' > openwrt/files/etc/uci-defaults/98-horus-welcome
+#!/bin/sh
+if [ -f /www/luci-static/resources/luci.js ] && [ -f /www/luci-static/horus_welcome.js ]; then
+    cat /www/luci-static/horus_welcome.js >> /www/luci-static/resources/luci.js
+fi
+exit 0
+EOF
+chmod +x openwrt/files/etc/uci-defaults/98-horus-welcome
+
 
 # Create uci-defaults script for HORUS-AX Wi-Fi defaults
 mkdir -p openwrt/files/etc/uci-defaults
