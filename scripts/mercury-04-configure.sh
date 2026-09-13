@@ -505,6 +505,69 @@ EOF
 	fi
 done
 
+echo ">>> Creating Horus Welcome popup script..."
+mkdir -p openwrt/files/www/luci-static/
+cat << 'EOF' > openwrt/files/www/luci-static/horus_welcome.js
+(function() {
+    if (localStorage.getItem('horus_welcome_shown')) return;
+    
+    window.addEventListener('load', function() {
+        var overlay = document.createElement('div');
+        overlay.style.position = 'fixed';
+        overlay.style.top = '0';
+        overlay.style.left = '0';
+        overlay.style.width = '100%';
+        overlay.style.height = '100%';
+        overlay.style.backgroundColor = 'rgba(0,0,0,0.7)';
+        overlay.style.zIndex = '9999';
+        overlay.style.display = 'flex';
+        overlay.style.justifyContent = 'center';
+        overlay.style.alignItems = 'center';
+        
+        var modal = document.createElement('div');
+        modal.style.backgroundColor = '#fff';
+        modal.style.padding = '30px';
+        modal.style.borderRadius = '10px';
+        modal.style.boxShadow = '0 0 20px rgba(0,238,255,0.5)';
+        modal.style.textAlign = 'center';
+        modal.style.maxWidth = '400px';
+        modal.style.fontFamily = 'Arial, sans-serif';
+        
+        var title = document.createElement('h2');
+        title.innerText = 'أهلاً بك في نظام Horus!';
+        title.style.color = '#0055ff';
+        title.style.marginTop = '0';
+        
+        var text = document.createElement('p');
+        text.innerText = 'تم إعداد الروتر بنجاح وهو الآن جاهز للعمل.\nWelcome to Horus! Router is successfully configured.';
+        text.style.color = '#333';
+        text.style.lineHeight = '1.5';
+        
+        var btn = document.createElement('button');
+        btn.innerText = 'موافق / OK';
+        btn.style.marginTop = '20px';
+        btn.style.padding = '10px 20px';
+        btn.style.backgroundColor = '#0055ff';
+        btn.style.color = '#fff';
+        btn.style.border = 'none';
+        btn.style.borderRadius = '5px';
+        btn.style.cursor = 'pointer';
+        btn.style.fontSize = '16px';
+        
+        btn.onclick = function() {
+            document.body.removeChild(overlay);
+            localStorage.setItem('horus_welcome_shown', 'true');
+        };
+        
+        modal.appendChild(title);
+        modal.appendChild(text);
+        modal.appendChild(btn);
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+    });
+})();
+EOF
+
 # Inject welcome script into Theme footers
 for THEME_FOOTER in "feeds/luci/themes/luci-theme-bootstrap/luasrc/view/themes/bootstrap/footer.htm" \
                     "feeds/luci/themes/luci-theme-openwrt-2020/luasrc/view/themes/openwrt2020/footer.htm" \
