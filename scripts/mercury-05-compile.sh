@@ -231,7 +231,7 @@ fi
 #
 #  1. Country 00 drops TX power to 0 dBm. The compiled-in world_regdom is
 #     deliberately tiny and flagged NO_IR, so selecting country "00" leaves
-#     the radio unable to transmit. Widening it to the full bands at 30 dBm
+#     the radio unable to transmit. Widening it to the full bands at 27 dBm
 #     with the restriction flags cleared gives 00 real power.
 #
 #  2. Client / WDS mode can't see or join an extended channel when the
@@ -263,8 +263,8 @@ text = re.sub(r'NL80211_RRF_DFS', '0', text)
 new_world = ('static const struct ieee80211_regdomain world_regdom = {\n'
              '\t.alpha2 = "00",\n'
              '\t.reg_rules = {\n'
-             '\t\tREG_RULE(2402 - 10, 2482 + 10, 40, 0, 30, 0),\n'
-             '\t\tREG_RULE(5140 - 10, 5895 + 10, 160, 0, 30, 0),\n'
+             '\t\tREG_RULE(2402 - 10, 2482 + 10, 40, 0, 27, 0),\n'
+             '\t\tREG_RULE(5140 - 10, 5895 + 10, 160, 0, 27, 0),\n'
              '\t},\n'
              '};')
 text = re.sub(r'static\s+const\s+struct\s+ieee80211_regdomain\s+world_regdom\s*=\s*\{.*?\};',
@@ -791,6 +791,6 @@ if [ -n "$GITHUB_STEP_SUMMARY" ]; then
         echo "then run \`mercury-wifi-check\` over SSH to confirm the radios came up."
         echo
         echo "5 GHz is configured for stable HE80 (AX) operation on standard channels (36-64)."
-        echo "MT7915 driver unlocked for 30 dBm maximum Tx-Power with latest firmware."
+        echo "MT7915 driver unlocked for 27 dBm maximum Tx-Power with latest firmware."
     } >> "$GITHUB_STEP_SUMMARY"
 fi

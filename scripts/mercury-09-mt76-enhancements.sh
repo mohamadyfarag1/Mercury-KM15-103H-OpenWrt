@@ -1,6 +1,6 @@
 #!/bin/bash
 # ===============================================================
-# Script 9: Apply MT7915 Enhancements (Firmware + 30 dBm Tx-Power)
+# Script 9: Apply MT7915 Enhancements (Firmware + 27 dBm Tx-Power)
 # ===============================================================
 set -e
 
@@ -22,9 +22,9 @@ rm -rf openwrt/package/kernel/mac80211/patches/mediatek 2>/dev/null || true
 rm -f openwrt/package/kernel/mt76/patches/*superchannel* 2>/dev/null || true
 rm -f openwrt/package/kernel/mt76/patches/998-mt7915-he160-dbdc.patch 2>/dev/null || true
 
-# 3. Inject MT7915 30 dBm Tx-Power unlock patch into package/kernel/mt76/patches/
+# 3. Inject MT7915 27 dBm Tx-Power unlock patch into package/kernel/mt76/patches/
 mkdir -p openwrt/package/kernel/mt76/patches
-cat << 'EOF' > openwrt/package/kernel/mt76/patches/995-mt7915-power-30dbm.patch
+cat << 'EOF' > openwrt/package/kernel/mt76/patches/995-mt7915-power-27dbm.patch
 --- a/mt7915/init.c
 +++ b/mt7915/init.c
 @@ -307,9 +307,8 @@
@@ -41,7 +41,7 @@ cat << 'EOF' > openwrt/package/kernel/mt76/patches/995-mt7915-power-30dbm.patch
  
 EOF
 
-echo ">>> MT7915 30 dBm power unlock patch installed to openwrt/package/kernel/mt76/patches/995-mt7915-power-30dbm.patch"
+echo ">>> MT7915 27 dBm power unlock patch installed to openwrt/package/kernel/mt76/patches/995-mt7915-power-27dbm.patch"
 echo ">>> MT7915 Enhancements applied successfully!"
 
 # 4. Inject Superchannels Patch
