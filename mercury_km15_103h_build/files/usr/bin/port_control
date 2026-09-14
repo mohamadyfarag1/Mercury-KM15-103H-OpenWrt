@@ -43,17 +43,34 @@ get_cpu_temp() {
         fi
     done
 
-    # Dynamic Thermal Model for MT7621 (SoC has no integrated internal thermal diode)
-    # Heatsink base: 49°C + load scaling + subtle natural breathing
-    local l1=0
-    if [ -f /proc/loadavg ]; then
-        l1=$(awk '{print int($1 * 10)}' /proc/loadavg 2>/dev/null || echo 0)
-    fi
-    local est_cpu=$(( 49 + (l1 > 30 ? 12 : l1 / 3) ))
-    local up_sec=0
-    [ -f /proc/uptime ] && up_sec=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
-    local osc=$(( up_sec % 2 ))
-    echo $(( est_cpu + osc ))
+    # No real sensor. The MT7621 SoC has no internal thermal diode and this
+    # board exposes no CPU thermal zone, so there is nothing to read. Return
+    # 0 rather than a fabricated number - the dashboard hides the CPU temp
+    # badge on 0, which is honest. (The mt7915 WiFi chip DOES have a sensor,
+    # reported per-radio by get_wifi_temp; that is the chip, not the SoC.)
+    echo 0
+}
+
+# Stable CPU utilisation, computed from two /proc/stat snapshots 250 ms
+# apart. A single snapshot is a running total since boot, so a percentage
+# only means anything as a delta between two reads. Doing that delta here,
+# over a known fixed interval, gives a steady number instead of the wild
+# swings the JS produced sampling across its irregular poll interval.
+get_cpu_usage() {
+    set -- $(sed -n 's/^cpu \+//p' /proc/stat 2>/dev/null)
+    [ -n "$1" ] || { echo 0; return; }
+    local i1=$(( ${4:-0} + ${5:-0} ))
+    local t1=$(( ${1:-0}+${2:-0}+${3:-0}+${4:-0}+${5:-0}+${6:-0}+${7:-0}+${8:-0} ))
+    usleep 250000 2>/dev/null || sleep 1
+    set -- $(sed -n 's/^cpu \+//p' /proc/stat 2>/dev/null)
+    local i2=$(( ${4:-0} + ${5:-0} ))
+    local t2=$(( ${1:-0}+${2:-0}+${3:-0}+${4:-0}+${5:-0}+${6:-0}+${7:-0}+${8:-0} ))
+    local dt=$(( t2 - t1 )) di=$(( i2 - i1 ))
+    [ "$dt" -gt 0 ] || { echo 0; return; }
+    local used=$(( (100 * (dt - di)) / dt ))
+    [ "$used" -lt 0 ] && used=0
+    [ "$used" -gt 100 ] && used=100
+    echo "$used"
 }
 
 get_wifi_temp() {
@@ -165,12 +182,18 @@ port_status() {
     read -r cpu_load < /proc/loadavg 2>/dev/null
     local cpu_temp
     cpu_temp=$(get_cpu_temp)
+    local cpu_usage
+    cpu_usage=$(get_cpu_usage)
 
-    # Print consolidated JSON
+    # Print consolidated JSON. "usage" is computed here from two /proc/stat
+    # snapshots a fixed 250 ms apart, so it is a stable instantaneous figure.
+    # The old dashboard computed it in JS from deltas across its irregular
+    # 3 s polls, which is what made it swing wildly (5% one tick, 100% the
+    # next). "stat" is kept only for backward compatibility.
     echo "{"
     echo '  "cpu": {'
-    printf '    "temp": %d, "stat": "%s", "loadavg": "%s"\n' \
-        "$cpu_temp" "$cpu_stat" "$cpu_load"
+    printf '    "temp": %d, "usage": %d, "stat": "%s", "loadavg": "%s"\n' \
+        "$cpu_temp" "$cpu_usage" "$cpu_stat" "$cpu_load"
     echo '  },'
 
     echo '  "ports": {'

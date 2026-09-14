@@ -192,7 +192,13 @@ function formatSpeed(carrier, speed, duplex, isDisabled) {
 		return e;
 	}
 
-	return carrier ? _('Connected / متصل') : _('No link / لا يوجد رابط');
+	// MUST return a DOM Node: callers do speedNode.appendChild(formatSpeed(...)),
+	// and appendChild throws "parameter 1 is not of type 'Node'" on a string.
+	// Returning a bare string here for no-link ports is what broke every live
+	// update (500 console errors) and left the whole status view stuck on
+	// "Loading view...".
+	return E('span', { 'style': 'color:#94a3b8;' },
+		[ carrier ? _('Connected / متصل') : _('No link / لا يوجد رابط') ]);
 }
 
 function formatStats(portdev) {
@@ -643,22 +649,25 @@ return baseclass.extend({
 
 				// Update CPU card
 				if (st.cpu) {
-					var cpuUsage = calculateCpuUsage(st.cpu.stat);
 					var usedElem = document.getElementById('km15-cpu-used');
 					var freeElem = document.getElementById('km15-cpu-free');
 					var barElem  = document.getElementById('km15-cpu-bar');
 
-					if (cpuUsage && usedElem && freeElem && barElem) {
-						usedElem.innerText = _('Used: %d%').format(cpuUsage.used);
-						freeElem.innerText = _('Free: %d%').format(cpuUsage.free);
-						barElem.style.width = cpuUsage.used + '%';
-						barElem.style.background = (cpuUsage.used >= 85) ? '#ef4444' : ((cpuUsage.used >= 60) ? '#f59e0b' : '#10b981');
-					} else if (st.cpu.loadavg && usedElem && usedElem.innerText.indexOf('--%') !== -1) {
-						var l1 = parseFloat(st.cpu.loadavg.split(' ')[0]) || 0;
-						var estUsed = Math.min(100, Math.round(l1 * 50));
-						usedElem.innerText = _('Used: ~%d%').format(estUsed);
-						freeElem.innerText = _('Free: ~%d%').format(100 - estUsed);
-						if (barElem) barElem.style.width = estUsed + '%';
+					// Prefer the stable usage the shell computes (st.cpu.usage);
+					// fall back to the old JS delta only if it is absent.
+					var used = null;
+					if (st.cpu.usage !== undefined && st.cpu.usage !== null && st.cpu.usage !== '') {
+						used = Math.max(0, Math.min(100, parseInt(st.cpu.usage, 10) || 0));
+					} else {
+						var d = calculateCpuUsage(st.cpu.stat);
+						if (d) used = d.used;
+					}
+
+					if (used !== null && usedElem && freeElem && barElem) {
+						usedElem.innerText = _('Used: %d%').format(used);
+						freeElem.innerText = _('Free: %d%').format(100 - used);
+						barElem.style.width = used + '%';
+						barElem.style.background = (used >= 85) ? '#ef4444' : ((used >= 60) ? '#f59e0b' : '#10b981');
 					}
 
 					var tempElem = document.getElementById('km15-cpu-temp');
@@ -667,8 +676,11 @@ return baseclass.extend({
 						if (cTemp > 0 && cTemp < 150) {
 							tempElem.innerText = '🌡️ ' + cTemp + '°C';
 							tempElem.style.background = getTempColor(cTemp);
+							tempElem.style.display = '';
 						} else {
-							tempElem.innerText = '🌡️ --°C';
+							// MT7621 has no CPU thermal sensor - hide the badge
+							// rather than show a fake or a dash.
+							tempElem.style.display = 'none';
 						}
 					}
 
