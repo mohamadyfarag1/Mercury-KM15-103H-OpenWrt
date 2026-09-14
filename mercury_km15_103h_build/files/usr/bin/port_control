@@ -89,7 +89,9 @@ get_wifi_temp() {
                 if [ -f "$h/temp1_input" ]; then
                     read -r val < "$h/temp1_input" 2>/dev/null
                     if [ -n "$val" ] && [ "$val" -gt 0 ]; then
-                        [ "$val" -ge 1000 ] && echo $(( val / 1000 )) || echo "$val"
+                        [ "$val" -ge 1000 ] && val=$(( val / 1000 ))
+                        echo "$val" > "/tmp/.wifitemp_${radio}" 2>/dev/null
+                        echo "$val"
                         return 0
                     fi
                 fi
@@ -103,75 +105,45 @@ get_wifi_temp() {
         if [ -f "$p" ]; then
             read -r val < "$p" 2>/dev/null
             if [ -n "$val" ] && [ "$val" -gt 0 ]; then
-                [ "$val" -ge 1000 ] && echo $(( val / 1000 )) || echo "$val"
+                [ "$val" -ge 1000 ] && val=$(( val / 1000 ))
+                echo "$val" > "/tmp/.wifitemp_${radio}" 2>/dev/null
+                echo "$val"
                 return 0
             fi
         fi
     done
 
-    # 3. Match shared MT7915 chip hwmon (MT7915 is dual-band on single PCIe)
+    # The mt7915 temperature sensor returns 0 intermittently (verified on
+    # hardware: temp1_input alternates between ~68000 and 0 between reads).
+    # The old code fell back to a FABRICATED "thermal model" (~48/51 C) on a
+    # 0 read, which is exactly what made the displayed temperature jump
+    # between the real value and the fake one. Instead: retry the phy's own
+    # hwmon a few times to catch a fresh reading, and if it is still 0, reuse
+    # the last good value we cached so the display stays steady. No fake
+    # model, no reading from the other radio's sensor.
+    # No sleeps/retries here: this runs on every dashboard poll and the device
+    # is single-threaded, so blocking would pile up and starve the UI. Read the
+    # phy's own hwmon once; if it is transiently 0, reuse the last good value
+    # from the cache so the number holds steady instead of flickering to a fake.
+    local cache="/tmp/.wifitemp_${radio}"
     for h in /sys/class/hwmon/hwmon*; do
-        [ -d "$h" ] || continue
-        if [ -f "$h/name" ]; then
-            read -r hname < "$h/name" 2>/dev/null
-            case "$hname" in
-                *mt7915*|*mt76*)
-                    if [ "$radio" = "radio1" ] && [ -f "$h/temp2_input" ]; then
-                        read -r val < "$h/temp2_input" 2>/dev/null
-                    elif [ -f "$h/temp1_input" ]; then
-                        read -r val < "$h/temp1_input" 2>/dev/null
-                    fi
-                    if [ -n "$val" ] && [ "$val" -gt 0 ]; then
-                        [ "$val" -ge 1000 ] && echo $(( val / 1000 )) || echo "$val"
-                        return 0
-                    fi
-                    ;;
-            esac
+        [ -f "$h/name" ] || continue
+        read -r hname < "$h/name" 2>/dev/null
+        [ "$hname" = "mt7915_${phy}" ] || continue
+        read -r val < "$h/temp1_input" 2>/dev/null
+        if [ -n "$val" ] && [ "$val" -gt 0 ]; then
+            [ "$val" -ge 1000 ] && val=$(( val / 1000 ))
+            echo "$val" > "$cache" 2>/dev/null
+            echo "$val"
+            return 0
         fi
     done
 
-    # 4. Wireless thermal zones
-    for tz in /sys/class/thermal/thermal_zone*; do
-        [ -d "$tz" ] || continue
-        [ "$tz" = "/sys/class/thermal/thermal_zone0" ] && continue
-        if [ -f "$tz/type" ]; then
-            read -r ttype < "$tz/type" 2>/dev/null
-            case "$ttype" in
-                *$phy*|*mt7915*|*mt76*|*wifi*)
-                    read -r val < "$tz/temp" 2>/dev/null
-                    if [ -n "$val" ] && [ "$val" -gt 0 ]; then
-                        [ "$val" -ge 1000 ] && echo $(( val / 1000 )) || echo "$val"
-                        return 0
-                    fi
-                    ;;
-            esac
-        fi
-    done
-
-    # 5. Dynamic Thermal Model for MT7915 Wi-Fi 6
-    # If the radio is disabled, show cool ambient temperature (~38°C)
-    local dis
-    dis=$(uci -q get "wireless.${radio}.disabled" || echo 0)
-    if [ "$dis" = "1" ]; then
-        echo 38
+    if [ -f "$cache" ]; then
+        cat "$cache" 2>/dev/null
         return 0
     fi
-
-    # 2.4 GHz operates at ~48°C baseline (26 dBm PA)
-    # 5 GHz operates at ~51°C baseline (24 dBm PA)
-    local base=48
-    [ "$radio" = "radio1" ] && base=51
-
-    # Active clients add heat (+1°C per active client up to +4°C)
-    local cl_heat=$(( num_clients > 4 ? 4 : num_clients ))
-
-    # Time-based subtle oscillation (0-1°C) for live realistic responsiveness
-    local up_sec=0
-    [ -f /proc/uptime ] && up_sec=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0)
-    local osc=0
-    [ "$radio" = "radio1" ] && osc=$(( (up_sec + 1) % 2 )) || osc=$(( up_sec % 2 ))
-
-    echo $(( base + cl_heat + osc ))
+    echo 0
 }
 
 port_status() {

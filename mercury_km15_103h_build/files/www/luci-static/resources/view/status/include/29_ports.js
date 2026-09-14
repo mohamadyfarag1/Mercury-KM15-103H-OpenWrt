@@ -297,6 +297,13 @@ function fetchStatus() {
 
 var _lastCpuTotal = null;
 var _lastCpuIdle = null;
+// Last status payload, kept across renders. LuCI re-runs the include's
+// render() every poll (~5s), which rebuilds the cards in their placeholder
+// state ("--%", hidden temp badges) for a moment before the next fetch
+// repopulates them - that brief reset is the flicker. Applying this cached
+// status synchronously at the end of render() paints the last known values
+// immediately, so a re-render is seamless.
+var _lastStatus = null;
 
 function calculateCpuUsage(statLine) {
 	if (!statLine) return null;
@@ -431,11 +438,10 @@ return baseclass.extend({
 					'class': 'ifacebox-body',
 					'style': 'height:78px; padding:4px 6px; background:#fff; display:flex; flex-direction:column; justify-content:center; align-items:center;'
 				}, [
-					E('div', {
-						'id': 'km15-cpu-temp',
-						'style': 'margin-bottom:4px; font-size:10px; font-weight:700; padding:1px 8px; border-radius:10px; color:#fff; background:#10b981;',
-						'title': _('CPU Temperature / درجة حرارة المعالج')
-					}, [ '🌡️ --°C' ]),
+					// No CPU temperature badge at all: the MT7621 SoC has no
+					// thermal sensor (no thermal zone, no SoC hwmon), so there is
+					// nothing to show. Removed entirely rather than displaying an
+					// empty or fabricated reading.
 					E('div', {
 						'style': 'width:100%; background:#e2e8f0; border-radius:4px; height:7px; overflow:hidden; margin-bottom:4px;'
 					}, [
@@ -490,8 +496,11 @@ return baseclass.extend({
 
 				var actionBtn = E('button', {
 					'id': 'km15-btn-' + devname,
-					'class': 'btn btn-sm ' + (isDisabled ? 'btn-primary' : 'btn-danger'),
-					'style': 'width:100%; font-size:11px; height:26px; padding:2px 4px; margin-top:6px; font-weight:700; border-radius:4px; cursor:pointer; display:flex; align-items:center; justify-content:center;',
+					'class': 'btn btn-sm',
+					// Explicit inline colours: Enable = green, Disable = red. The
+					// theme paints btn-primary blue, so a class alone can't make the
+					// Enable button green; inline background overrides it.
+					'style': 'width:100%; font-size:11px; height:26px; padding:2px 4px; margin-top:6px; font-weight:700; border-radius:4px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#fff !important; ' + (isDisabled ? 'background:#10b981 !important; border:1px solid #10b981 !important;' : 'background:#ef4444 !important; border:1px solid #ef4444 !important;'),
 					'click': function(ev) {
 						ev.preventDefault();
 						var nextAction = isDisabled ? 'enable' : 'disable';
@@ -585,8 +594,9 @@ return baseclass.extend({
 
 				var wifiActionBtn = E('button', {
 					'id': 'km15-wifibtn-' + r.id,
-					'class': 'btn btn-sm ' + (isDisabled ? 'btn-primary' : 'btn-danger'),
-					'style': 'width:100%; font-size:11px; height:26px; padding:2px 4px; margin-top:6px; font-weight:700; border-radius:4px; cursor:pointer; display:flex; align-items:center; justify-content:center;',
+					'class': 'btn btn-sm',
+					// Turn On = green, Turn Off = red (same scheme as the port buttons).
+					'style': 'width:100%; font-size:11px; height:26px; padding:2px 4px; margin-top:6px; font-weight:700; border-radius:4px; cursor:pointer; display:flex; align-items:center; justify-content:center; color:#fff !important; ' + (isDisabled ? 'background:#10b981 !important; border:1px solid #10b981 !important;' : 'background:#ef4444 !important; border:1px solid #ef4444 !important;'),
 					'click': function(ev) {
 						ev.preventDefault();
 						ev.target.disabled = true;
@@ -607,7 +617,10 @@ return baseclass.extend({
 
 				var tempBadge = E('span', {
 					'id': 'km15-wifitemp-' + r.id,
-					'style': 'display:inline-block; margin-left:4px; font-size:10px; font-weight:700; padding:1px 6px; border-radius:10px; color:#fff; background:#10b981;',
+					// Created hidden so it never flashes "--°C" on first render or
+					// a cached reload; applyLiveStatus reveals it once the real
+					// mt7915 hwmon temperature arrives (a fraction of a second later).
+					'style': 'display:none; margin-left:4px; font-size:10px; font-weight:700; padding:1px 6px; border-radius:10px; color:#fff; background:#10b981;',
 					'title': _('Wireless Radio Temperature / درجة حرارة الكارت')
 				}, [ '🌡️ --°C' ]);
 
@@ -670,19 +683,7 @@ return baseclass.extend({
 						barElem.style.background = (used >= 85) ? '#ef4444' : ((used >= 60) ? '#f59e0b' : '#10b981');
 					}
 
-					var tempElem = document.getElementById('km15-cpu-temp');
-					if (tempElem) {
-						var cTemp = parseInt(st.cpu.temp, 10) || 0;
-						if (cTemp > 0 && cTemp < 150) {
-							tempElem.innerText = '🌡️ ' + cTemp + '°C';
-							tempElem.style.background = getTempColor(cTemp);
-							tempElem.style.display = '';
-						} else {
-							// MT7621 has no CPU thermal sensor - hide the badge
-							// rather than show a fake or a dash.
-							tempElem.style.display = 'none';
-						}
-					}
+					// (CPU temperature intentionally not shown - MT7621 has no sensor.)
 
 					var loadElem = document.getElementById('km15-cpu-load');
 					if (loadElem && st.cpu.loadavg) {
@@ -724,7 +725,10 @@ return baseclass.extend({
 
 						if (btnNode) {
 							btnNode.disabled = false;
-							btnNode.className = 'btn btn-sm ' + (isDis ? 'btn-primary' : 'btn-danger');
+							btnNode.className = 'btn btn-sm';
+							btnNode.style.setProperty('color', '#fff', 'important');
+							btnNode.style.setProperty('background', isDis ? '#10b981' : '#ef4444', 'important');
+							btnNode.style.setProperty('border', '1px solid ' + (isDis ? '#10b981' : '#ef4444'), 'important');
 							btnNode.innerText = isDis ? _('Enable / تفعيل') : _('Disable / إيقاف');
 						}
 
@@ -765,7 +769,9 @@ return baseclass.extend({
 								wTempNode.style.background = getTempColor(t);
 								wTempNode.style.display = 'inline-block';
 							} else {
-								wTempNode.innerText = '🌡️ --°C';
+								// No reading - keep the badge hidden instead of
+								// showing a "--°C" placeholder that flickers.
+								wTempNode.style.display = 'none';
 							}
 						}
 
@@ -792,7 +798,10 @@ return baseclass.extend({
 
 						if (wBtnNode) {
 							wBtnNode.disabled = false;
-							wBtnNode.className = 'btn btn-sm ' + (isDis ? 'btn-primary' : 'btn-danger');
+							wBtnNode.className = 'btn btn-sm';
+							wBtnNode.style.setProperty('color', '#fff', 'important');
+							wBtnNode.style.setProperty('background', isDis ? '#10b981' : '#ef4444', 'important');
+							wBtnNode.style.setProperty('border', '1px solid ' + (isDis ? '#10b981' : '#ef4444'), 'important');
 							wBtnNode.innerText = isDis ? _('Turn On / تشغيل') : _('Turn Off / إيقاف');
 						}
 
@@ -804,10 +813,21 @@ return baseclass.extend({
 
 			function doLiveUpdate() {
 				return fetchStatus().then(function(res) {
+					_lastStatus = res;
 					applyLiveStatus(res);
 				}).catch(function(e) {
 					console.warn('km15 live update error:', e);
 				});
+			}
+
+			// Paint last-known values as soon as LuCI attaches the container
+			// (setTimeout 0 runs right after render() returns and the nodes are
+			// in the DOM), so a re-render never flashes placeholders before the
+			// first fetch completes.
+			if (_lastStatus) {
+				window.setTimeout(function() {
+					try { applyLiveStatus(_lastStatus); } catch (e) {}
+				}, 0);
 			}
 
 			// Immediate non-blocking update (50ms after render)
