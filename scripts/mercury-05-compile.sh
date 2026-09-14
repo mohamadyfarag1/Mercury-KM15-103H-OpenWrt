@@ -74,10 +74,11 @@ make package/kernel/mt76/prepare V=s -j"$(nproc)"   2>&1 || true
 #   is also the widest mode mobile clients reliably scan and join.
 # ---------------------------------------------------------------
 echo "======================================="
-echo "Step 3: Removing HE160-DBDC driver patch (Superchannels patch is kept)..."
+echo "Step 3: Removing HE160-DBDC driver patch and superchannel patches..."
 echo "======================================="
 rm -f package/kernel/mt76/patches/998-mt7915-he160-dbdc.patch 2>/dev/null || true
-echo "OK: HE80 operation enforced."
+rm -f package/kernel/mt76/patches/*superchannel* 2>/dev/null || true
+echo "OK: HE80 operation and clean standard IEEE channel plan enforced."
 
 
 

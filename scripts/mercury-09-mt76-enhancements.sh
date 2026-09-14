@@ -44,10 +44,7 @@ EOF
 echo ">>> MT7915 27 dBm power unlock patch installed to openwrt/package/kernel/mt76/patches/995-mt7915-power-27dbm.patch"
 echo ">>> MT7915 Enhancements applied successfully!"
 
-# 4. Inject Superchannels Patch
-if [ -f "scripts/999-mt76-5ghz-custom-superchannels.patch" ]; then
-    cp scripts/999-mt76-5ghz-custom-superchannels.patch openwrt/package/kernel/mt76/patches/
-    echo ">>> Superchannels patch (5000-5995 MHz) installed."
-else
-    echo "WARNING: scripts/999-mt76-5ghz-custom-superchannels.patch not found!"
-fi
+# 4. Ensure stock clean channels (remove any superchannel patch)
+rm -f openwrt/package/kernel/mt76/patches/*superchannel* 2>/dev/null || true
+echo ">>> Stock IEEE 5GHz channel plan enforced (clean, stable, 100% working channels)."
+
