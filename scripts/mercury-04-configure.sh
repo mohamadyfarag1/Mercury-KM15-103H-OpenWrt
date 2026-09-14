@@ -660,52 +660,70 @@ chmod +x openwrt/files/etc/uci-defaults/99-horus-wifi
 
 echo "? Configuration complete."
 cat << 'EOF' > openwrt/files/www/luci-static/horus_ui_tweaks.js
-// === HORUS UI TWEAKS ===
-window.addEventListener('load', function() {
-    setInterval(function() {
-        // 1. Hide CPU Card
-        document.querySelectorAll('.box, .ifacebox, .node-system-board, div[data-title]').forEach(function(box) {
-            if (box.textContent.includes('المعالج / CPU') || box.getAttribute('data-title') === 'المعالج' || box.getAttribute('data-title') === 'CPU') {
-                box.style.display = 'none';
+// === HORUS UI TWEAKS (MutationObserver - Zero Polling Overhead) ===
+(function() {
+    function applyTweaks() {
+        // 1. Hide CPU Card (MT7621 data is unreliable)
+        document.querySelectorAll('.ifacebox, .node-system-board').forEach(function(box) {
+            if (box.hasAttribute('data-horus-cpu-checked')) return;
+            box.setAttribute('data-horus-cpu-checked', '1');
+            var head = box.querySelector('.ifacebox-head, h4');
+            if (!head) return;
+            var title = head.textContent.trim();
+            if (title.indexOf('CPU') !== -1 || title.indexOf('\u0627\u0644\u0645\u0639\u0627\u0644\u062c') !== -1) {
+                box.style.setProperty('display', 'none', 'important');
             }
         });
 
-        // 2. Color LAN Buttons
+        // 2. Color Network Buttons (Enable=Red, Disable=Glowing Blue)
         document.querySelectorAll('.cbi-button').forEach(function(b) {
+            if (b.hasAttribute('data-horus-styled')) return;
+            b.setAttribute('data-horus-styled', '1');
             var txt = b.textContent.trim();
-            if (txt === 'تفعيل / Enable' || txt === 'Enable' || txt === 'تفعيل') {
-                b.style.background = '#d64550';
-                b.style.color = '#ffffff';
-                b.style.border = '1px solid rgba(214,69,80,0.5)';
-                b.style.boxShadow = '0 0 8px rgba(214,69,80,0.4)';
-            } else if (txt === 'إيقاف / Disable' || txt === 'Disable' || txt === 'إيقاف') {
-                b.style.background = 'linear-gradient(135deg, #0284c7, #2563eb)';
-                b.style.color = '#ffffff';
-                b.style.border = '1px solid rgba(255,255,255,0.2)';
-                b.style.boxShadow = '0 0 12px rgba(14, 165, 233, 0.7)';
+            if (txt.indexOf('Enable') !== -1 || txt.indexOf('\u062a\u0641\u0639\u064a\u0644') !== -1 || txt === 'Turn On') {
+                b.style.cssText += '; background:#d64550 !important; color:#fff !important; border:1px solid rgba(214,69,80,0.5) !important; box-shadow:0 0 8px rgba(214,69,80,0.4) !important;';
+            } else if (txt.indexOf('Disable') !== -1 || txt.indexOf('\u0625\u064a\u0642\u0627\u0641') !== -1 || txt === 'Turn Off') {
+                b.style.cssText += '; background:linear-gradient(135deg,#0284c7,#2563eb) !important; color:#fff !important; border:1px solid rgba(255,255,255,0.2) !important; box-shadow:0 0 12px rgba(14,165,233,0.7) !important;';
             }
         });
 
-        // 3. Hide Empty Wi-Fi Temperatures
-        document.querySelectorAll('span, div, b').forEach(function(el) {
-            if (el.textContent && el.textContent.includes('-°C')) {
-                el.style.display = 'none';
+        // 3. Hide temperature "-°C" on WiFi cards (MT7915 has no nl80211 temp)
+        document.querySelectorAll('.ifacebox-body small, .ifacebox-body span, .ifacebox-body b').forEach(function(el) {
+            if (el.hasAttribute('data-horus-temp-checked')) return;
+            el.setAttribute('data-horus-temp-checked', '1');
+            var txt = el.textContent || '';
+            if (txt.match(/^-\s*\u00b0C$/) || txt.trim() === '-\u00b0C') {
+                el.style.setProperty('display', 'none', 'important');
+                var prev = el.previousElementSibling;
+                if (prev && (prev.tagName === 'IMG' || prev.tagName === 'I')) {
+                    prev.style.setProperty('display', 'none', 'important');
+                }
             }
         });
 
-        // 4. Fix empty LAN text
+        // 4. Fix empty "No link" text on inactive LAN ports
         document.querySelectorAll('.ifacebox').forEach(function(box) {
             var icon = box.querySelector('img[src*="port_down"]');
             if (icon) {
                 var small = box.querySelector('small');
                 if (small && small.textContent.trim() === '') {
-                    small.innerHTML = 'No link / لا يوجد رابط';
+                    small.innerHTML = 'No link / \u0644\u0627 \u064a\u0648\u062c\u062f \u0631\u0627\u0628\u0637';
                     small.style.color = '#888';
                 }
             }
         });
-    }, 1000);
-});
+    }
+
+    // Run once immediately
+    applyTweaks();
+    // MutationObserver fires on DOM changes - zero polling overhead
+    if (window.MutationObserver) {
+        new MutationObserver(applyTweaks).observe(
+            document.documentElement, { childList: true, subtree: true }
+        );
+    }
+    window.addEventListener('load', applyTweaks);
+})();
 EOF
 
 cat << 'EOF' > openwrt/files/etc/uci-defaults/99-horus-ui-tweaks
