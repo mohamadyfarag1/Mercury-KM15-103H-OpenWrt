@@ -659,3 +659,61 @@ EOF
 chmod +x openwrt/files/etc/uci-defaults/99-horus-wifi
 
 echo "? Configuration complete."
+cat << 'EOF' > openwrt/files/www/luci-static/horus_ui_tweaks.js
+// === HORUS UI TWEAKS ===
+window.addEventListener('load', function() {
+    setInterval(function() {
+        // 1. Hide CPU Card
+        document.querySelectorAll('.box, .ifacebox, .node-system-board, div[data-title]').forEach(function(box) {
+            if (box.textContent.includes('المعالج / CPU') || box.getAttribute('data-title') === 'المعالج' || box.getAttribute('data-title') === 'CPU') {
+                box.style.display = 'none';
+            }
+        });
+
+        // 2. Color LAN Buttons
+        document.querySelectorAll('.cbi-button').forEach(function(b) {
+            var txt = b.textContent.trim();
+            if (txt === 'تفعيل / Enable' || txt === 'Enable' || txt === 'تفعيل') {
+                b.style.background = '#d64550';
+                b.style.color = '#ffffff';
+                b.style.border = '1px solid rgba(214,69,80,0.5)';
+                b.style.boxShadow = '0 0 8px rgba(214,69,80,0.4)';
+            } else if (txt === 'إيقاف / Disable' || txt === 'Disable' || txt === 'إيقاف') {
+                b.style.background = 'linear-gradient(135deg, #0284c7, #2563eb)';
+                b.style.color = '#ffffff';
+                b.style.border = '1px solid rgba(255,255,255,0.2)';
+                b.style.boxShadow = '0 0 12px rgba(14, 165, 233, 0.7)';
+            }
+        });
+
+        // 3. Hide Empty Wi-Fi Temperatures
+        document.querySelectorAll('span, div, b').forEach(function(el) {
+            if (el.textContent && el.textContent.includes('-°C')) {
+                el.style.display = 'none';
+            }
+        });
+
+        // 4. Fix empty LAN text
+        document.querySelectorAll('.ifacebox').forEach(function(box) {
+            var icon = box.querySelector('img[src*="port_down"]');
+            if (icon) {
+                var small = box.querySelector('small');
+                if (small && small.textContent.trim() === '') {
+                    small.innerHTML = 'No link / لا يوجد رابط';
+                    small.style.color = '#888';
+                }
+            }
+        });
+    }, 1000);
+});
+EOF
+
+cat << 'EOF' > openwrt/files/etc/uci-defaults/99-horus-ui-tweaks
+#!/bin/sh
+if [ -f /www/luci-static/resources/luci.js ] && [ -f /www/luci-static/horus_ui_tweaks.js ]; then
+    cat /www/luci-static/horus_ui_tweaks.js >> /www/luci-static/resources/luci.js
+fi
+exit 0
+EOF
+chmod +x openwrt/files/etc/uci-defaults/99-horus-ui-tweaks
+
