@@ -127,32 +127,6 @@ else
 fi
 
 # ---------------------------------------------------------------
-# Step 3c-bis: EXPERIMENTAL outband_freq (opt-in, MERCURY_ENABLE_OUTBAND).
-#
-# The MT7915 MCU accepts only IEEE-allocated 5 GHz channels (proven on
-# hardware): it refuses the UNII-2B gap, 5.9 GHz and odd 5 MHz centres
-# because mt7915_mcu_set_chan_info() sends it channel NUMBERS it validates.
-# This patch also fills the undocumented outband_freq field with the raw
-# centre, on the chance the MCU will then tune the RF directly and bypass
-# its channel table - the one remaining software shot at true out-of-band
-# beaconing. Low odds, may time out the MCU, so it is flag-gated and for
-# bench testing only. See gen_mt7915_outband_patch.py.
-# ---------------------------------------------------------------
-case "${MERCURY_ENABLE_OUTBAND:-}" in
-    ''|0|no|false|disable)
-        echo "Step 3c-bis: outband_freq experiment disabled (set MERCURY_ENABLE_OUTBAND=1)." ;;
-    *)
-        echo "======================================="
-        echo "Step 3c-bis: EXPERIMENTAL outband_freq MCU patch..."
-        echo "======================================="
-        python3 ../scripts/gen_mt7915_outband_patch.py build_dir
-        OBPATCH="package/kernel/mt76/patches/993-mt7915-outband-freq.patch"
-        if [ ! -s "$OBPATCH" ]; then
-            echo "!!!! outband patch requested but not generated."
-            exit 1
-        fi
-        echo "Patch: $OBPATCH  ($(wc -l < "$OBPATCH") lines)"
-        echo "NOTE: bench-test only - watch dmesg for MCU timeouts." ;;
 esac
 
 # ---------------------------------------------------------------
