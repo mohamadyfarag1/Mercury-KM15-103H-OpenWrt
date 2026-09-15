@@ -78,6 +78,11 @@ echo "Step 3: Removing HE160-DBDC driver patch and superchannel patches..."
 echo "======================================="
 rm -f package/kernel/mt76/patches/998-mt7915-he160-dbdc.patch 2>/dev/null || true
 rm -f package/kernel/mt76/patches/*superchannel* 2>/dev/null || true
+mkdir -p package/kernel/mt76/patches
+if [ -f "../scripts/995-mt7915-power-unlock.patch" ]; then
+    cp "../scripts/995-mt7915-power-unlock.patch" package/kernel/mt76/patches/995-mt7915-power-unlock.patch
+    echo "OK: Injected 995-mt7915-power-unlock.patch"
+fi
 echo "OK: HE80 operation and clean standard IEEE channel plan enforced."
 
 
