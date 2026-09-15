@@ -1,0 +1,13 @@
+--- a/mt7915/init.c
++++ b/mt7915/init.c
+@@ -307,9 +307,8 @@
+ 							  target_power);
+ 		target_power += nss_delta;
+ 		target_power = DIV_ROUND_UP(target_power, 2);
+-		chan->max_power = min_t(int, chan->max_reg_power,
+-					target_power);
+-		chan->orig_mpwr = target_power;
++		chan->max_power = chan->max_reg_power;
++		chan->orig_mpwr = chan->max_reg_power;
+ 	}
+ }
