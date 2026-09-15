@@ -35,7 +35,7 @@ cat << 'PATCHEOF' > openwrt/package/kernel/mt76/patches/995-mt7915-power-unlock.
  }
 --- a/mt7915/mcu.c
 +++ b/mt7915/mcu.c
-@@ -3375,6 +3375,11 @@
+@@ -3376,6 +3376,12 @@
  	tx_power = mt7915_get_power_bound(phy, hw->conf.power_level);
  	tx_power = mt76_get_rate_power_limits(mphy, mphy->chandef.chan,
  					      &limits_array, tx_power);
